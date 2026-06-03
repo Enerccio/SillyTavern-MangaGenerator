@@ -443,17 +443,6 @@
     color: var(--progErrorColor, #ff4a4a) !important;
 }
 
-.enerccio_mangagen_content_container q::before,
-.enerccio_mangagen_content_container q::after {
-    content: none !important;
-    display: inline-block;
-    width: 0;
-    height: 0;
-    overflow: hidden;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-}
-
 .enerccio_mangagen_field.checkbox_field {
     flex-direction: row;
     align-items: center;
@@ -600,4 +589,15 @@ enerccio_mangagen_section_row {
     background-color: var(--ac-color-text, rgba(0, 0, 0, 0.4)) !important;
     box-sizing: border-box;
     display: block;
+}
+
+.enerccio_mangagen_layout_container q::before,
+.enerccio_mangagen_layout_container q::after {
+    content: none !important;
+    display: inline-block;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    user-select: none !important;
+    -webkit-user-select: none !important;
 }
