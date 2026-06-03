@@ -473,3 +473,131 @@
     user-select: none;
     font-size: 0.85em;
 }
+
+.enerccio_mangagen_section_tags_panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 8px;
+}
+
+/* Helper rule to hide toggle panels gracefully without breaking flex rules */
+.enerccio_mangagen_section_tags_panel.hidden {
+    display: none !important;
+}
+
+.enerccio_mangagen_section_generated_view,
+.enerccio_mangagen_section_tags_view {
+    width: 100%;
+    height: 240px; /* Forces the box to span a spacious, consistent area even when empty */
+    overflow-y: auto;
+    padding: 12px 150px 12px 12px; /* Extra right padding protects text from layout button overlays */
+    box-sizing: border-box;
+    background-color: var(--ac-color-background, rgba(0, 0, 0, 0.3)) !important;
+    color: var(--ac-color-text, #fff) !important;
+    border: 1px solid var(--ac-color-border, #555);
+    border-radius: 4px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    user-select: text;
+    cursor: text;
+}
+
+/* Ensures edit field takes up full spacing context layout */
+.enerccio_mangagen_section_tags_edit {
+    width: 100%;
+    height: 110px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+/* Container framework that locks layout modes */
+.enerccio_mangagen_view_wrapper {
+    position: relative;
+    width: 100%;
+    margin-top: 8px;
+}
+
+/* Hide inactive view layouts safely */
+.enerccio_mangagen_layout_container.hidden {
+    display: none !important;
+}
+
+/* Standardized design parameters for output display windows */
+.enerccio_mangagen_section_generated_view,
+.enerccio_mangagen_section_tags_view {
+    width: 100%;
+    min-height: 140px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 12px 140px 12px 12px; /* Large padding on the right protects text from button clipping */
+    box-sizing: border-box;
+    background-color: var(--ac-color-background, rgba(0, 0, 0, 0.3)) !important;
+    color: var(--ac-color-text, #fff) !important;
+    border: 1px solid var(--ac-color-border, #555);
+    border-radius: 4px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    user-select: text;
+    cursor: text;
+}
+
+.enerccio_mangagen_section_generated_edit,
+.enerccio_mangagen_section_tags_edit {
+    width: 100%;
+    height: 240px; /* Matches the viewing div height perfectly */
+    resize: none;  /* Disables manual resizing to preserve the uniform layout structure */
+    box-sizing: border-box;
+    padding: 12px;
+}
+
+/* Float action generation triggers to the exact same lower-right coordinates */
+.enerccio_mangagen_section_btn_generate,
+.enerccio_mangagen_section_btn_generate_tags {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+/* Styling for the active tab state highlighting button */
+.enerccio_mangagen_section_btn_tags_toggle.active-mode {
+    background-color: var(--SmartThemeQuoteColor, #e18a24) !important;
+    color: #000 !important;
+    font-weight: bold;
+}
+
+enerccio_mangagen_section_row {
+    position: relative;
+    overflow: visible !important; /* Prevents the floating panel from getting clipped */
+}
+
+/* 2. Turn the toggle submenus into absolute floating drop-down panels */
+.enerccio_mangagen_section_toggle_panel {
+    position: absolute;
+    top: 40px; /* Hovers directly beneath the button bar row header */
+    left: 8px;
+    right: 8px;
+    z-index: 200; /* Forces it to sit strictly above thinking timers and text views */
+
+    /* Using native theme vars to match your look in image_96175b.png */
+    background-color: var(--ac-color-background, #111111) !important;
+    border: 1px solid var(--ac-color-border, #555);
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+    box-sizing: border-box;
+}
+
+/* 3. Slight style touch-up for the internal textareas inside the popover */
+.enerccio_mangagen_section_toggle_panel textarea {
+    width: 100%;
+    background-color: var(--ac-color-text, rgba(0, 0, 0, 0.4)) !important;
+    box-sizing: border-box;
+    display: block;
+}

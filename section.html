@@ -1,5 +1,4 @@
 <div class="enerccio_mangagen_section_row" id="mangagen_section_placeholder" data-index="-1">
-    <!-- Header Control Bar containing Context/Message Bound Intervals -->
     <div class="enerccio_mangagen_section_header">
         <div class="enerccio_mangagen_row_field">
             <label>Context From</label>
@@ -21,6 +20,8 @@
         <button class="menu_button fa-solid fa-circle-info enerccio_mangagen_section_btn_info" title="Inspect Selected Messages Range"></button>
         <button class="menu_button HTML_button enerccio_mangagen_section_btn_prompt" title="Modify Section Prompt Override">Prompt</button>
         <button class="menu_button HTML_button enerccio_mangagen_section_btn_rules" title="Modify Section Additional Rules">Rules</button>
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_tags_toggle" title="Toggle Image Generation Tags Panel">Tags</button>
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_tags_prompt" title="Modify Section Image Tagging Prompt Override">Tags Prompt</button>
 
         <span class="enerccio_mangagen_section_btns">
             <button class="menu_button fa-solid fa-copy enerccio_mangagen_section_btn_copy" title="Copy Raw Content"></button>
@@ -28,7 +29,9 @@
         </span>
     </div>
 
-    <!-- Toggleable Control Fields for Section Rules Adjustments -->
+    <div class="enerccio_mangagen_section_toggle_panel enerccio_mangagen_section_tags_prompt_panel" style="display: none;">
+        <textarea class="text_pole enerccio_mangagen_section_tags_prompt_override" rows="3" placeholder="Section-specific image tagging prompt override layout..."></textarea>
+    </div>
     <div class="enerccio_mangagen_section_toggle_panel enerccio_mangagen_section_prompt_panel" style="display: none;">
         <textarea class="text_pole enerccio_mangagen_section_prompt_override" rows="3" placeholder="Section-specific prompt override layout..."></textarea>
     </div>
@@ -36,34 +39,55 @@
         <textarea class="text_pole enerccio_mangagen_section_additional_rules" rows="3" placeholder="Section-specific context formatting criteria..."></textarea>
     </div>
 
-    <!-- Tall main text block containing generated markup layouts -->
-    <div class="enerccio_mangagen_section_main">
-        <div class="enerccio_mangagen_mes_block">
-            <!-- Asynchronous Streaming Thinking Framework Container Accordion -->
-            <details class="enerccio_mangagen_reasoning_details" style="display: none;">
-                <summary class="enerccio_mangagen_reasoning_summary flex-container">
-                    <div class="enerccio_mangagen_reasoning_header_block flex-container">
-                        <div class="enerccio_mangagen_reasoning_header flex-container">
-                            <span class="enerccio_mangagen_reasoning_text_label">Thinking for 0.0 s</span>
-                            <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
-                        </div>
+    <!-- ================= LAYOUT MODE 1: SCRIPT VIEW ================= -->
+    <div class="enerccio_mangagen_layout_container enerccio_mangagen_layout_script">
+        <!-- Script Reasoning Info Block -->
+        <details class="enerccio_mangagen_reasoning_details" style="display: none;">
+            <summary class="enerccio_mangagen_reasoning_summary flex-container">
+                <div class="enerccio_mangagen_reasoning_header_block flex-container">
+                    <div class="enerccio_mangagen_reasoning_header flex-container">
+                        <span class="enerccio_mangagen_reasoning_text_label">Thinking for 0.0 s</span>
+                        <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
                     </div>
-                </summary>
-                <div class="enerccio_mangagen_reasoning"></div>
-            </details>
+                </div>
+            </summary>
+            <div class="enerccio_mangagen_reasoning"></div>
+        </details>
 
-            <!-- Dual-Mode Markdown View / Raw Text Editor Container -->
-            <div class="enerccio_mangagen_content_container">
-                <div class="enerccio_mangagen_section_generated_view text_pole"></div>
-                <textarea class="text_pole enerccio_mangagen_section_generated_edit" placeholder="Generated scene descriptors layout or panel scripts will appear here..." style="display: none;"></textarea>
-            </div>
+        <!-- Script Content Display Area -->
+        <div class="enerccio_mangagen_view_wrapper">
+            <div class="enerccio_mangagen_section_generated_view text_pole"></div>
+            <textarea class="text_pole enerccio_mangagen_section_generated_edit" style="display: none;"></textarea>
+
+            <button class="menu_button HTML_button enerccio_mangagen_section_btn_generate">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation
+            </button>
         </div>
     </div>
 
-    <!-- Footer Execution Menu Control Row -->
-    <div class="enerccio_mangagen_section_footer">
-        <button class="menu_button HTML_button enerccio_mangagen_section_btn_generate">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation
-        </button>
+    <!-- ================= LAYOUT MODE 2: TAGS VIEW ================= -->
+    <div class="enerccio_mangagen_layout_container enerccio_mangagen_layout_tags hidden">
+        <!-- Tags Reasoning Info Block -->
+        <details class="enerccio_mangagen_tags_reasoning_details enerccio_mangagen_reasoning_details" style="display: none;">
+            <summary class="enerccio_mangagen_reasoning_summary flex-container">
+                <div class="enerccio_mangagen_reasoning_header_block flex-container">
+                    <div class="enerccio_mangagen_reasoning_header flex-container">
+                        <span class="enerccio_mangagen_tags_text_label">Thinking for 0.0 s</span>
+                        <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
+                    </div>
+                </div>
+            </summary>
+            <div class="enerccio_mangagen_tags_reasoning enerccio_mangagen_reasoning"></div>
+        </details>
+
+        <!-- Tags Content Display Area -->
+        <div class="enerccio_mangagen_view_wrapper">
+            <div class="enerccio_mangagen_section_tags_view"></div>
+            <textarea class="text_pole enerccio_mangagen_section_tags_edit" placeholder="AI scene prompts or character descriptors tags layout will appear here..." style="display: none;"></textarea>
+
+            <button class="menu_button HTML_button enerccio_mangagen_section_btn_generate_tags">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Tags
+            </button>
+        </div>
     </div>
 </div>

@@ -35,6 +35,7 @@
 
         <button id="manga_btn_prompt_override" class="menu_button HTML_button" title="Edit Prompt Template">Prompt Override</button>
         <button id="manga_btn_additional_rules" class="menu_button HTML_button" title="Edit Additional Rules">Additional Rules</button>
+        <button id="manga_btn_tags_prompt_override" class="menu_button HTML_button" title="Edit Image Tagging Prompt Template">Tags Prompt Override</button>
 
         <button id="manga_btn_add_panel" class="menu_button HTML_button a_bright_button" title="Create Next Panel Section">
             <i class="fa-solid fa-plus"></i> Add Panel
@@ -55,6 +56,14 @@
             <button id="manga_btn_close_rules" class="menu_button fa-solid fa-xmark" title="Close Panel"></button>
         </div>
         <textarea id="manga_additional_rules" class="text_pole" rows="6" placeholder="Enter persistent formatting instructions or character descriptions..."></textarea>
+    </div>
+
+    <div id="manga_tags_prompt_override_panel" class="enerccio_mangagen_prompt_panel" style="display: none;">
+        <div class="enerccio_mangagen_prompt_panel_titlebar">
+            <span>Tags Prompt Override Configuration</span>
+            <button id="manga_btn_close_tags_prompt" class="menu_button fa-solid fa-xmark" title="Close Panel"></button>
+        </div>
+        <textarea id="manga_tags_prompt_override" class="text_pole" rows="8" placeholder="Enter custom tag generation rules here..."></textarea>
     </div>
 
     <div id="enerccio_mangagen_panels_container" class="enerccio_mangagen_panels_workspace">

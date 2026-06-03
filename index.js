@@ -23,7 +23,7 @@ const LORE_DENOMINATOR = 'BACKGROUND LORE';
 const LORE_DENOMINATOR_START = `===== ${LORE_DENOMINATOR} START =====`;
 const LORE_DENOMINATOR_END = `===== ${LORE_DENOMINATOR} END =====`;
 
-const DEFAULT_PROMPT = `OTHER: You are an expert Manga Scriptwriter and Storyboard Director. Your task is to adapt the ${MANGA_DENOMINATOR} raw roleplay text into a professional, highly visual manga script formatted by pages and panels. Keep the continuation of page numbers (if any).
+const DEFAULT_PROMPT = `You are an expert Manga Scriptwriter and Storyboard Director. Your task is to adapt the ${MANGA_DENOMINATOR} raw roleplay text into a professional, highly visual manga script formatted by pages and panels. Keep the continuation of page numbers (if any).
 
 ### Content guidelines
 1. Do not ignore any story elements
@@ -55,6 +55,23 @@ For every page and panel, strictly use this structure:
   - [SFX]: [Onomatopoeia description, e.g., *WHOOSH*, *THUD*, *RUMBLE*]
 `;
 
+
+const GMANGA_DENOMINATOR = 'GENERATED MANGA SCRIPT';
+const GMANGA_DENOMINATOR_START = `===== ${GMANGA_DENOMINATOR} START =====`;
+const GMANGA_DENOMINATOR_END = `===== ${GMANGA_DENOMINATOR} END =====`;
+const DEFAULT_TAGS_PROMPT = `You are an expert AI Image Generation Prompt Engineer specializing in high-fidelity anime tagging schema (Danbooru-style tokens mixed with composition descriptors).
+Your task is to analyze the provided ${MANGA_DENOMINATOR} and the corresponding ${GMANGA_DENOMINATOR}. You have {{tokenBudget}} output token budget available.
+
+Use provided ${LORE_DENOMINATOR} section as a source of character/scene definitions.
+
+For every panel defined in the ${GMANGA_DENOMINATOR}, output descriptive tokens and tags tailored for an AI image generator using this exact markdown layout structure:
+
+### PAGE [ Page Number ] / PANEL [Number]
+- **character: [Character Name]**: [ Danbooru tags describing physical appearance, clothing, specific expression, and exact physical pose in this frame, separated by commas. e.g., 1girl, solo, long aqua hair, blue eyes, uniform, smiling, holding sword, dynamic pose ]
+- **scene**: [ Masterpiece, best quality, background object descriptions, perspective camera angles, illumination rules, and atmospheric conditions. e.g., masterpiece, best quality, dark theme, wide shot, cinematic lighting, crumbling castle ruins, night, full moon ]
+
+Strictly stick to this structural output format. Do not write any structural setup headers, summaries, or conversational dialogue commentary.`;
+
 class MangaSection {
 
     constructor() {
@@ -70,6 +87,14 @@ class MangaSection {
         this.additionalRules = null;
         this._generating = false;
         this._abort = null;
+
+        this.tagsPromptOverride = null;
+        this.tagsText = null;
+        this.tagsReasoningText = null;
+        this.tagsReasoningTime = null;
+        this.tagsReasoningFinished = null;
+        this._generatingTags = false;
+        this._abortTags = null;
     }
 
     static fromJson(json) {
@@ -84,6 +109,12 @@ class MangaSection {
         section.additionalRules = json.additionalRules;
         section.contextStartMessage = json.contextStartMessage;
         section.contextEndMessage = json.contextEndMessage;
+
+        section.tagsPromptOverride = json.tagsPromptOverride;
+        section.tagsText = json.tagsText;
+        section.tagsReasoningText = json.tagsReasoningText;
+        section.tagsReasoningTime = json.tagsReasoningTime;
+        section.tagsReasoningFinished = json.tagsReasoningFinished;
         return section;
     }
 
@@ -98,7 +129,13 @@ class MangaSection {
             endingMessage: this.endingMessage,
             additionalRules: this.additionalRules,
             contextStartMessage: this.contextStartMessage,
-            contextEndMessage: this.contextEndMessage
+            contextEndMessage: this.contextEndMessage,
+
+            tagsPromptOverride: this.tagsPromptOverride,
+            tagsText: this.tagsText,
+            tagsReasoningText: this.tagsReasoningText,
+            tagsReasoningTime: this.tagsReasoningTime,
+            tagsReasoningFinished: this.tagsReasoningFinished,
         };
     }
 
@@ -121,6 +158,25 @@ class MangaSection {
         this.reasoningFinished = reasoningFinished;
     }
 
+    isGeneratingTags() {
+        return this._generatingTags;
+    }
+
+    setGeneratingTags(val) {
+        this._generatingTags = val;
+    }
+
+    abortGeneratingTags() {
+        if (this._abortTags) this._abortTags.abort();
+    }
+
+    setTagsReasoning(reasoning, reasoningTime, reasoningFinished) {
+        this.tagsReasoningText = reasoning;
+        if (!reasoningFinished)
+            this.tagsReasoningTime = reasoningTime;
+        this.tagsReasoningFinished = reasoningFinished;
+    }
+
 }
 
 class Manga {
@@ -129,6 +185,7 @@ class Manga {
         this.title = "Untitled"
         this.sections = [];
         this.promptOverride = null;
+        this.tagsPromptOverride = null;
         this.additionalRules = null;
         this.tokenBudget = 4096;
         this.trigger = 'MangaGenerator'
@@ -144,6 +201,7 @@ class Manga {
             title: this.title,
             sections: this.sections.map(section => section.toJson()),
             promptOverride: this.promptOverride,
+            tagsPromptOverride: this.tagsPromptOverride,
             additionalRules: this.additionalRules,
             tokenBudget: this.tokenBudget,
             trigger: this.trigger,
@@ -160,6 +218,7 @@ class Manga {
         manga.title = json.title;
         manga.sections = json.sections.map(sectionJson => MangaSection.fromJson(sectionJson));
         manga.promptOverride = json.promptOverride;
+        manga.tagsPromptOverride = json.tagsPromptOverride;
         manga.additionalRules = json.additionalRules;
         manga.tokenBudget = json.tokenBudget;
         manga.trigger = json.trigger;
@@ -168,7 +227,6 @@ class Manga {
         manga.contextRight = json.contextRight;
         manga.stripCharacterNames = json.stripCharacterNames;
         manga.stripUsername = json.stripUsername;
-
         return manga;
     }
 
@@ -258,7 +316,10 @@ class MangaGenerator {
                 if (!isNaN(idx)) {
                     sectionScrolls[idx] = {
                         viewScroll: $(this).find('.enerccio_mangagen_section_generated_view').scrollTop(),
-                        reasoningScroll: $(this).find('.enerccio_mangagen_reasoning').scrollTop()
+                        reasoningScroll: $(this).find('.enerccio_mangagen_reasoning').scrollTop(),
+                        tagsViewScroll: $(this).find('.enerccio_mangagen_section_tags_view').scrollTop(),
+                        tagsReasoningScroll: $(this).find('.enerccio_mangagen_tags_reasoning').scrollTop(),
+                        isTagsMode: $(this).find('.enerccio_mangagen_section_btn_tags_toggle').hasClass('active-mode')
                     };
                 }
             });
@@ -461,6 +522,25 @@ class MangaGenerator {
                 await this.save();
             });
 
+            const $tagsPromptPanel = $workspace.find('#manga_tags_prompt_override_panel');
+            const $tagsPromptTextArea = $workspace.find('#manga_tags_prompt_override');
+            const $btnTagsPromptOverride = $workspace.find('#manga_btn_tags_prompt_override');
+            const $btnCloseTagsPrompt = $workspace.find('#manga_btn_close_tags_prompt');
+
+            $btnTagsPromptOverride.on('click', () => {
+                $tagsPromptTextArea.val(cmanga.tagsPromptOverride !== null ? cmanga.tagsPromptOverride : DEFAULT_TAGS_PROMPT);
+                $tagsPromptPanel.toggle();
+            });
+
+            $btnCloseTagsPrompt.on('click', () => {
+                $tagsPromptPanel.hide();
+            });
+
+            $tagsPromptTextArea.on('change input', async () => {
+                cmanga.tagsPromptOverride = $tagsPromptTextArea.val() || null;
+                await this.save();
+            });
+
             // Additional Rules Popup Handling Logic
             const $rulesPanel = $workspace.find('#manga_additional_rules_panel');
             const $rulesTextArea = $workspace.find('#manga_additional_rules');
@@ -619,29 +699,59 @@ class MangaGenerator {
                         });
                     });
 
+                    const $allDropdownPanels = $row.find('.enerccio_mangagen_section_toggle_panel');
+
                     // Prompt overrides section submenus bindings
                     const $promptPanel = $row.find('.enerccio_mangagen_section_prompt_panel');
                     const $promptInput = $row.find('.enerccio_mangagen_section_prompt_override');
-                    $row.find('.enerccio_mangagen_section_btn_prompt').on('click', () => {
+                    $row.find('.enerccio_mangagen_section_btn_prompt').on('click', (e) => {
+                        e.stopPropagation();
                         $promptInput.val(section.promptOverride || '');
-                        $promptPanel.toggle();
+                        const wasVisible = $promptPanel.is(':visible');
+                        $allDropdownPanels.hide(); // Hide any other open dropdowns first
+                        if (!wasVisible) $promptPanel.show();
                     });
                     $promptInput.on('change input', async () => {
                         section.promptOverride = $promptInput.val() || null;
                         await this.save();
                     });
 
+                    const $tagsPromptPanel = $row.find('.enerccio_mangagen_section_tags_prompt_panel');
+                    const $tagsPromptInput = $row.find('.enerccio_mangagen_section_tags_prompt_override');
+                    $row.find('.enerccio_mangagen_section_btn_tags_prompt').on('click', (e) => {
+                        e.stopPropagation();
+                        $tagsPromptInput.val(section.tagsPromptOverride || '');
+                        const wasVisible = $tagsPromptPanel.is(':visible');
+                        $allDropdownPanels.hide(); // Hide any other open dropdowns first
+                        if (!wasVisible) $tagsPromptPanel.show();
+                    });
+
+                    $tagsPromptInput.on('change input', async () => {
+                        section.tagsPromptOverride = $tagsPromptInput.val() || null;
+                        await this.save();
+                    });
+
                     // Additional configuration criteria boundaries bindings
                     const $rulesPanel = $row.find('.enerccio_mangagen_section_rules_panel');
                     const $rulesInput = $row.find('.enerccio_mangagen_section_additional_rules');
-                    $row.find('.enerccio_mangagen_section_btn_rules').on('click', () => {
+                    $row.find('.enerccio_mangagen_section_btn_rules').on('click', (e) => {
+                        e.stopPropagation();
                         $rulesInput.val(section.additionalRules || '');
-                        $rulesPanel.toggle();
+                        const wasVisible = $rulesPanel.is(':visible');
+                        $allDropdownPanels.hide(); // Hide any other open dropdowns first
+                        if (!wasVisible) $rulesPanel.show();
                     });
                     $rulesInput.on('change input', async () => {
                         section.additionalRules = $rulesInput.val() || null;
                         await this.save();
                     });
+
+                    const dismissOpenDropdowns = (event) => {
+                        if (!$(event.target).closest('.enerccio_mangagen_section_toggle_panel, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_tags_prompt').length) {
+                            $allDropdownPanels.hide();
+                        }
+                    };
+                    $(document).off('click', dismissOpenDropdowns).on('click', dismissOpenDropdowns);
 
                     const $viewDiv = $row.find('.enerccio_mangagen_section_generated_view');
                     const $editArea = $row.find('.enerccio_mangagen_section_generated_edit');
@@ -691,16 +801,73 @@ class MangaGenerator {
 
                     // Wire up the copy button trigger action
                     $row.find('.enerccio_mangagen_section_btn_copy').on('click', () => {
-                        const textToCopy = section.generatedText || '';
+                        const isTagsActive = !$tagsLayout.hasClass('hidden');
+                        const textToCopy = isTagsActive ? (section.tagsText || '') : (section.generatedText || '');
 
                         navigator.clipboard.writeText(textToCopy).then(() => {
-                            if (typeof toastr !== 'undefined') {
-                                toastr.success(`Panel #${index + 1} content copied to clipboard!`);
-                            }
+                            toastDebounced(`${isTagsActive ? 'Tags' : 'Panel Script'} #${index + 1} copied!`);
                         }).catch((err) => {
                             console.error('Failed to copy text: ', err);
                             alert('Could not copy text to clipboard.');
                         });
+                    });
+
+                    const $tagsPanel = $row.find('.enerccio_mangagen_section_tags_panel');
+                    $row.find('.enerccio_mangagen_section_btn_tags_toggle').on('click', () => {
+                        $tagsPanel.toggle();
+                    });
+
+                    const $tagsView = $row.find('.enerccio_mangagen_section_tags_view');
+                    const $tagsEdit = $row.find('.enerccio_mangagen_section_tags_edit');
+
+                    $tagsView.on('click', () => {
+                        if (section.isGeneratingTags()) return;
+                        $tagsView.hide();
+                        $tagsEdit.show().focus();
+                    });
+
+                    $tagsEdit.on('blur', async () => {
+                        section.tagsText = $tagsEdit.val();
+                        $tagsEdit.hide();
+                        $tagsView.show();
+                        await this.save();
+                        await this.refreshSection($row, section);
+                    });
+
+                    $tagsEdit.on('input', () => {
+                        section.tagsText = $tagsEdit.val();
+                    });
+
+                    $row.find('.enerccio_mangagen_section_btn_generate_tags').on('click', async () => {
+                        if (section.isGeneratingTags()) {
+                            section.abortGeneratingTags();
+                        } else {
+                            await this.generateTags($row, index);
+                        }
+                    });
+
+                    $row.find('.enerccio_mangagen_tags_reasoning_details').on('toggle', (e) => {
+                        const isOpen = e.target.open;
+                        $(e.target).find('.enerccio_mangagen_reasoning_arrow')
+                            .toggleClass('fa-chevron-down', !isOpen)
+                            .toggleClass('fa-chevron-up', isOpen);
+                    });
+
+                    const $toggleBtn = $row.find('.enerccio_mangagen_section_btn_tags_toggle');
+                    const $scriptLayout = $row.find('.enerccio_mangagen_layout_script');
+                    const $tagsLayout = $row.find('.enerccio_mangagen_layout_tags');
+
+                    $toggleBtn.on('click', () => {
+                        const showTags = $tagsLayout.hasClass('hidden');
+                        if (showTags) {
+                            $scriptLayout.addClass('hidden');
+                            $tagsLayout.removeClass('hidden');
+                            $toggleBtn.addClass('active-mode').text('Script');
+                        } else {
+                            $tagsLayout.addClass('hidden');
+                            $scriptLayout.removeClass('hidden');
+                            $toggleBtn.removeClass('active-mode').text('Tags');
+                        }
                     });
 
                     $panelsContainer.append($row);
@@ -709,6 +876,14 @@ class MangaGenerator {
                     if (sectionScrolls[index]) {
                         $row.find('.enerccio_mangagen_section_generated_view').scrollTop(sectionScrolls[index].viewScroll);
                         $row.find('.enerccio_mangagen_reasoning').scrollTop(sectionScrolls[index].reasoningScroll);
+                        $row.find('.enerccio_mangagen_section_tags_view').scrollTop(sectionScrolls[index].tagsViewScroll);
+                        $row.find('.enerccio_mangagen_tags_reasoning').scrollTop(sectionScrolls[index].tagsReasoningScroll);
+                    }
+
+                    if (sectionScrolls[index] && sectionScrolls[index].isTagsMode) {
+                        $scriptLayout.addClass('hidden');
+                        $tagsLayout.removeClass('hidden');
+                        $toggleBtn.addClass('active-mode').text('Script');
                     }
                 }
             } else {
@@ -736,17 +911,15 @@ class MangaGenerator {
     async refreshSection($row, section, staggered = false) {
         if (!$row || !section) return;
 
-        // Core DOM manipulation block
         const performUpdate = () => {
             const isGenerating = section.isGenerating();
+            const isGeneratingTags = section.isGeneratingTags();
 
-            // Populate baseline numeric intervals fields using native constructor attributes
             $row.find('.enerccio_mangagen_section_ctx_from').val(section.contextStartMessage ?? 0);
             $row.find('.enerccio_mangagen_section_ctx_to').val(section.contextEndMessage ?? 0);
             $row.find('.enerccio_mangagen_section_msg_from').val(section.startingMessage ?? 0);
             $row.find('.enerccio_mangagen_section_msg_to').val(section.endingMessage ?? 0);
 
-            // Fetch DOM references for the text scroll containers
             const $viewDiv = $row.find('.enerccio_mangagen_section_generated_view');
             const $editArea = $row.find('.enerccio_mangagen_section_generated_edit');
             const $reasoningDiv = $row.find('.enerccio_mangagen_reasoning');
@@ -757,24 +930,22 @@ class MangaGenerator {
             const currentViewScroll = viewEl ? viewEl.scrollTop : 0;
             const currentReasoningScroll = reasoningEl ? reasoningEl.scrollTop : 0;
 
-            // Determine if elements are currently scrolled to the bottom (with a 15px threshold tolerance)
-            const isViewAtBottom = viewEl
-                ? (viewEl.scrollHeight - viewEl.scrollTop <= viewEl.clientHeight + 15)
-                : false;
-            const isReasoningAtBottom = reasoningEl
-                ? (reasoningEl.scrollHeight - reasoningEl.scrollTop <= reasoningEl.clientHeight + 15)
-                : false;
+            const isViewAtBottom = viewEl ? (viewEl.scrollHeight - viewEl.scrollTop <= viewEl.clientHeight + 15) : false;
+            const isReasoningAtBottom = reasoningEl ? (reasoningEl.scrollHeight - reasoningEl.scrollTop <= reasoningEl.clientHeight + 15) : false;
 
-            // Handle dual-mode content block updates
+            // --- 1. DYNAMIC SCRIPT VIEW PLACEHOLDER ---
             if (!$editArea.is(':focus')) {
                 let text = section.generatedText || '';
-                let formattedText = messageFormatting(text, '', true, false, -1);
-
-                $viewDiv.html(formattedText || '<p style="opacity: 0.5; font-style: italic; margin: 0;">No content generated yet. Click here to edit or run generation...</p>');
+                if (!text && isGenerating) {
+                    // Show animated loader if it's actively thinking/generating the script
+                    $viewDiv.html('<p style="opacity: 0.6; font-style: italic; margin: 0;"><i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i>Generating script storyboard content... Please wait.</p>');
+                } else {
+                    let formattedText = messageFormatting(text, '', true, false, -1);
+                    $viewDiv.html(formattedText || '<p style="opacity: 0.5; font-style: italic; margin: 0;">No content generated yet. Click here to edit or run generation...</p>');
+                }
                 $editArea.val(text);
             }
 
-            // Evaluate background thinking loop parameters data state metrics
             const $detailsBlock = $row.find('.enerccio_mangagen_reasoning_details');
             if (section.reasoningText && section.reasoningText.trim() !== '') {
                 $detailsBlock.show();
@@ -787,46 +958,105 @@ class MangaGenerator {
 
                 const trackingTimeMs = section.reasoningTime ?? 0;
                 const elapsedSeconds = (trackingTimeMs / 1000).toFixed(1);
-
-                const statusLabel = section.reasoningFinished
-                    ? `Thought for ${elapsedSeconds} s`
-                    : `Thinking for ${elapsedSeconds} s`;
-
+                const statusLabel = section.reasoningFinished ? `Thought for ${elapsedSeconds} s` : `Thinking for ${elapsedSeconds} s`;
                 $row.find('.enerccio_mangagen_reasoning_text_label').text(statusLabel);
             } else {
                 $detailsBlock.hide();
             }
 
-            // --- Auto-Scroll Snap Anchor Processing ---
-            // If the user was already at the bottom before the text content changed, snap down to track the new tokens
             if (isViewAtBottom && viewEl) {
                 viewEl.scrollTop = viewEl.scrollHeight;
             } else if (viewEl) {
-                viewEl.scrollTop = currentViewScroll; // Keeps position if user scrolled up!
+                viewEl.scrollTop = currentViewScroll;
             }
 
             if (isReasoningAtBottom && reasoningEl) {
                 reasoningEl.scrollTop = reasoningEl.scrollHeight;
             } else if (reasoningEl) {
-                reasoningEl.scrollTop = currentReasoningScroll; // Keeps position if user scrolled up!
+                reasoningEl.scrollTop = currentReasoningScroll;
             }
 
-            // Automatically disable/enable standard interaction nodes during streaming
-            $row.find('input, .enerccio_mangagen_section_btn_info, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_delete, .enerccio_mangagen_section_btn_copy')
-                .prop('disabled', isGenerating);
+            // --- 2. DYNAMIC TAGS VIEW PLACEHOLDER ---
+            const $tagsView = $row.find('.enerccio_mangagen_section_tags_view');
+            const $tagsEdit = $row.find('.enerccio_mangagen_section_tags_edit');
+            const $tagsReasoningDiv = $row.find('.enerccio_mangagen_tags_reasoning');
 
-            // Force visual markdown view mode if generation is running
+            const tagsViewEl = $tagsView[0];
+            const tagsReasoningEl = $tagsReasoningDiv[0];
+
+            const currentTagsViewScroll = tagsViewEl ? tagsViewEl.scrollTop : 0;
+            const currentTagsReasoningScroll = tagsReasoningEl ? tagsReasoningEl.scrollTop : 0;
+
+            const isTagsViewAtBottom = tagsViewEl ? (tagsViewEl.scrollHeight - tagsViewEl.scrollTop <= tagsViewEl.clientHeight + 15) : false;
+            const isTagsReasoningAtBottom = tagsReasoningEl ? (tagsReasoningEl.scrollHeight - tagsReasoningEl.scrollTop <= tagsReasoningEl.clientHeight + 15) : false;
+
+            if (!$tagsEdit.is(':focus')) {
+                let tagsText = section.tagsText || '';
+                if (!tagsText && isGeneratingTags) {
+                    // Show animated loader if it's actively thinking/generating the image tags
+                    $tagsView.html('<p style="opacity: 0.6; font-style: italic; margin: 0;"><i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i>Analyzing script context and compiling image tags... Please wait.</p>');
+                } else {
+                    let formattedTagsText = messageFormatting(tagsText, '', true, false, -1);
+                    $tagsView.html(formattedTagsText || '<p style="opacity: 0.5; font-style: italic; margin: 0;">No tags generated yet. Click here to edit or run tag generation...</p>');
+                }
+                $tagsEdit.val(tagsText);
+            }
+
+            const $tagsDetailsBlock = $row.find('.enerccio_mangagen_tags_reasoning_details');
+            if (section.tagsReasoningText && section.tagsReasoningText.trim() !== '') {
+                $tagsDetailsBlock.show();
+                let tagsData = section.tagsReasoningText;
+                tagsData = messageFormatting(tagsData, '', true, false, -1, null, true);
+
+                if (tagsReasoningEl) {
+                    tagsReasoningEl.innerHTML = tagsData;
+                }
+
+                const trackingTagsTimeMs = section.tagsReasoningTime ?? 0;
+                const elapsedTagsSeconds = (trackingTagsTimeMs / 1000).toFixed(1);
+                const tagsStatusLabel = section.tagsReasoningFinished ? `Thought for ${elapsedTagsSeconds} s` : `Thinking for ${elapsedTagsSeconds} s`;
+                $row.find('.enerccio_mangagen_tags_text_label').text(tagsStatusLabel);
+            } else {
+                $tagsDetailsBlock.hide();
+            }
+
+            if (isTagsViewAtBottom && tagsViewEl) {
+                tagsViewEl.scrollTop = tagsViewEl.scrollHeight;
+            } else if (tagsViewEl) {
+                tagsViewEl.scrollTop = currentTagsViewScroll;
+            }
+
+            if (isTagsReasoningAtBottom && tagsReasoningEl) {
+                tagsReasoningEl.scrollTop = tagsReasoningEl.scrollHeight;
+            } else if (tagsReasoningEl) {
+                tagsReasoningEl.scrollTop = currentTagsReasoningScroll;
+            }
+
+            $row.find('input, .enerccio_mangagen_section_btn_info, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_tags_prompt, .enerccio_mangagen_section_btn_tags_toggle, .enerccio_mangagen_section_btn_delete, .enerccio_mangagen_section_btn_copy')
+                .prop('disabled', isGenerating || isGeneratingTags);
+
             if (isGenerating) {
                 $editArea.hide();
                 $viewDiv.show();
             }
+            if (isGeneratingTags) {
+                $tagsEdit.hide();
+                $tagsView.show();
+            }
 
-            // Swap out icons, style rules, and textual values based on streaming flag states
+            // --- 3. FIX THE BROKEN ICON GLYPHS (Swapped fa-stop for fa-ban) ---
             const $genBtn = $row.find('.enerccio_mangagen_section_btn_generate');
             if (isGenerating) {
-                $genBtn.html('<i class="fa-solid fa-stop"></i> Abort Generation').addClass('aborting');
+                $genBtn.html('<i class="fa-solid fa-ban"></i> Abort Generation').addClass('aborting');
             } else {
                 $genBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation').removeClass('aborting');
+            }
+
+            const $tagsGenBtn = $row.find('.enerccio_mangagen_section_btn_generate_tags');
+            if (isGeneratingTags) {
+                $tagsGenBtn.html('<i class="fa-solid fa-ban"></i> Abort Tag Gen').addClass('aborting');
+            } else {
+                $tagsGenBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Generate Tags').removeClass('aborting');
             }
         };
 
@@ -1086,6 +1316,214 @@ class MangaGenerator {
 
         queries.push({role: 'user', content: prompt});
 
+        return queries;
+    }
+
+    async generateTags($initialRow, sectionIndex) {
+        const context = SillyTavern.getContext();
+        const metadata = initializeRequestMetadata();
+        const profile = metadata.cId;
+        const cmanga = this.mangaContainer.getCurrent();
+        const genSection = cmanga.getSection(sectionIndex);
+
+        if (genSection.isGeneratingTags()) return;
+
+        const getLiveRow = () => {
+            const $live = this.$mangaPanel ? this.$mangaPanel.find(`#mangagen_section_${sectionIndex}`) : null;
+            return ($live && $live.length) ? $live : $initialRow;
+        };
+
+        genSection.setGeneratingTags(true);
+        genSection._abortTags = new AbortController();
+
+        try {
+            await this.refreshSection(getLiveRow(), genSection);
+            const queries = await this.generateTagsQueryData(cmanga, genSection);
+
+            let asyncGeneratorFunction = await context.ConnectionManagerRequestService.sendRequest(profile, queries,
+                profile.max_tokens, {stream: true, signal: genSection._abortTags.signal});
+
+            let reasoningTime = null;
+            let reasoningDone = false;
+            const asyncGenerator = asyncGeneratorFunction();
+            while (true) {
+                let r = await asyncGenerator.next();
+                if (r.done) {
+                    genSection._abortTags = null;
+                    break;
+                }
+
+                const returnFromGenerator = r.value;
+                const text = returnFromGenerator.text;
+                const reasoning = returnFromGenerator.state?.reasoning;
+
+                if (reasoning && reasoningTime === null) {
+                    reasoningTime = performance.now();
+                }
+
+                genSection.tagsText = text;
+
+                if (text) {
+                    reasoningDone = true;
+                }
+
+                if (reasoning)
+                    genSection.setTagsReasoning(reasoning, performance.now() - reasoningTime, reasoningDone);
+
+                await this.refreshSection(getLiveRow(), genSection, true);
+            }
+        } catch (aborted) {
+            if (aborted === 'userStopped') {
+                log('Tag generation aborted by user');
+            } else {
+                error("Tag generation failed: " + aborted);
+            }
+            genSection._abortTags = null;
+        }
+
+        genSection.setGeneratingTags(false);
+        await this.save();
+        await this.refreshSection(getLiveRow(), genSection);
+    }
+
+    async generateTagsQueryData(cmanga, genSection) {
+        const context = SillyTavern.getContext();
+        const queries = [];
+
+        const userName = name1 || '';
+        let userDescription = power_user.persona_description || '';
+
+        let {
+            description,
+            personality,
+            persona,
+            scenario,
+            mesExamples,
+            system,
+            jailbreak,
+            charDepthQuery,
+            creatorNotes,
+        } = getCharacterCardFields();
+
+        if (jailbreak) {
+            queries.push({
+                content: jailbreak,
+                role: "system",
+            });
+        }
+
+        const firstMessage = getSettings("firstMessage");
+        if (firstMessage)
+            queries.push({
+                content: firstMessage,
+                role: "system",
+            });
+
+        queries.push({
+            content: LORE_DENOMINATOR_START,
+            role: "system",
+        });
+
+        if (userName && userDescription) {
+            queries.push({
+                content: `${userName}: ${userDescription}`,
+                role: "system"
+            });
+        }
+
+        if (system)
+            queries.push({
+                content: scenario,
+                role: "system",
+            });
+        if (scenario)
+            queries.push({
+                content: scenario,
+                role: "system",
+            });
+        if (persona)
+            queries.push({
+                content: persona,
+                role: "system",
+            });
+        if (description)
+            queries.push({
+                content: description,
+                role: "system",
+            });
+        if (personality)
+            queries.push({
+                content: personality,
+                role: "system",
+            });
+        if (mesExamples)
+            queries.push({
+                content: mesExamples,
+                role: "system",
+            });
+
+        let chatMessagesData = "";
+        const count = genSection.contextStartMessage || 0;
+        const countTo = genSection.contextEndMessage || context.chat.length - 1;
+        const chatMessages =  context.chat;
+        if (count <= countTo && count >= 0) {
+            chatMessagesData = await this.getMessageContent(count, countTo);
+        }
+
+        const globalScanData = {
+            personaDescription: persona,
+            characterDescription: description,
+            characterPersonality: personality,
+            characterDepthQuery: charDepthQuery,
+            scenario: scenario,
+            creatorNotes: creatorNotes,
+            trigger: cmanga.trigger,
+        };
+        let this_max_context = getMaxPromptTokens();
+        const {
+            worldInfoString,
+            worldInfoBefore,
+            worldInfoAfter,
+            worldInfoExamples,
+            worldInfoDepth,
+            outletEntries
+        } = await getWorldInfoPrompt(chatMessagesData ? [ chatMessagesData ]: [ ], this_max_context, false, globalScanData);
+
+        if (worldInfoBefore) {
+            queries.push({
+                content: worldInfoBefore,
+                role: "system",
+            });
+        }
+        if (worldInfoAfter) {
+            queries.push({
+                content: worldInfoAfter,
+                role: "system",
+            });
+        }
+
+        queries.push({
+            content: LORE_DENOMINATOR_END,
+            role: "system",
+        });
+
+        queries.push({
+            content: `${MANGA_DENOMINATOR_START} \n\n${chatMessagesData} \n\n ${MANGA_DENOMINATOR_END} `,
+            role: "system"
+        });
+
+        queries.push({
+            content: `${GMANGA_DENOMINATOR_START} \n\n${genSection.generatedText || 'No storyboard script details found.'} \n\n ${GMANGA_DENOMINATOR_END}`,
+            role: "system"
+        });
+
+        let tagsPrompt = genSection.tagsPromptOverride || cmanga.tagsPromptOverride || DEFAULT_TAGS_PROMPT;
+        tagsPrompt = compilePromptTemplate(tagsPrompt, {
+            tokenBudget: cmanga.tokenBudget || 4096,
+            additionalRules: genSection.additionalRules || cmanga.additionalRules || '',
+        });
+
+        queries.push({ role: 'user', content: tagsPrompt });
         return queries;
     }
 
