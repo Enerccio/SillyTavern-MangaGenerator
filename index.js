@@ -242,6 +242,28 @@ class MangaGenerator {
     async refresh() {
         if (!this.$mangaPanel) return;
 
+        let isContainerAtBottom = false;
+        let oldPanelsContainerScroll = 0;
+        const sectionScrolls = [];
+
+        const $oldPanelsContainer = this.$mangaPanel.find('#enerccio_mangagen_panels_container');
+        if ($oldPanelsContainer.length) {
+            oldPanelsContainerScroll = $oldPanelsContainer.scrollTop();
+
+            const el = $oldPanelsContainer[0];
+            isContainerAtBottom = (el.scrollHeight - el.scrollTop <= el.clientHeight + 30);
+
+            $oldPanelsContainer.find('.enerccio_mangagen_section_row').each(function() {
+                const idx = parseInt($(this).attr('data-index'), 10);
+                if (!isNaN(idx)) {
+                    sectionScrolls[idx] = {
+                        viewScroll: $(this).find('.enerccio_mangagen_section_generated_view').scrollTop(),
+                        reasoningScroll: $(this).find('.enerccio_mangagen_reasoning').scrollTop()
+                    };
+                }
+            });
+        }
+
         const $tabsContainer = this.$mangaPanel.find('.enerccio_mangagen_tabs_container');
         $tabsContainer.empty();
 
@@ -513,9 +535,6 @@ class MangaGenerator {
                 cmanga.sections.push(newSection);
                 await this.save();
                 await this.refresh();
-
-                const $panelsContainer = $workspace.find('#enerccio_mangagen_panels_container');
-                $panelsContainer.scrollTop($panelsContainer[0].scrollHeight);
             });
 
             // Locate the template workspace section block and instantiate child frames
@@ -686,9 +705,22 @@ class MangaGenerator {
 
                     $panelsContainer.append($row);
                     await this.refreshSection($row, section);
+
+                    if (sectionScrolls[index]) {
+                        $row.find('.enerccio_mangagen_section_generated_view').scrollTop(sectionScrolls[index].viewScroll);
+                        $row.find('.enerccio_mangagen_reasoning').scrollTop(sectionScrolls[index].reasoningScroll);
+                    }
                 }
             } else {
                 $panelsContainer.append('<div class="enerccio_mangagen_no_sections_fallback">No layout partitions built for this manga yet. Append section segments to begin generating.</div>');
+            }
+
+            if (isContainerAtBottom) {
+                // If they were at the bottom, snap down to reveal the newly appended panel
+                $panelsContainer.scrollTop($panelsContainer[0].scrollHeight);
+            } else if (oldPanelsContainerScroll > 0) {
+                // If they manually scrolled up somewhere, leave them exactly where they were
+                $panelsContainer.scrollTop(oldPanelsContainerScroll);
             }
         } else {
             $emptyMessage.show();
@@ -721,6 +753,9 @@ class MangaGenerator {
 
             const viewEl = $viewDiv[0];
             const reasoningEl = $reasoningDiv[0];
+
+            const currentViewScroll = viewEl ? viewEl.scrollTop : 0;
+            const currentReasoningScroll = reasoningEl ? reasoningEl.scrollTop : 0;
 
             // Determine if elements are currently scrolled to the bottom (with a 15px threshold tolerance)
             const isViewAtBottom = viewEl
@@ -766,9 +801,14 @@ class MangaGenerator {
             // If the user was already at the bottom before the text content changed, snap down to track the new tokens
             if (isViewAtBottom && viewEl) {
                 viewEl.scrollTop = viewEl.scrollHeight;
+            } else if (viewEl) {
+                viewEl.scrollTop = currentViewScroll; // Keeps position if user scrolled up!
             }
+
             if (isReasoningAtBottom && reasoningEl) {
                 reasoningEl.scrollTop = reasoningEl.scrollHeight;
+            } else if (reasoningEl) {
+                reasoningEl.scrollTop = currentReasoningScroll; // Keeps position if user scrolled up!
             }
 
             // Automatically disable/enable standard interaction nodes during streaming

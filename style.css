@@ -420,8 +420,14 @@
     z-index: 2;
 }
 
+.enerccio_mangagen_section_btns {
+    margin-left: auto;   /* Pushes both buttons cleanly to the far right */
+    display: flex;       /* Forces inner buttons to align horizontally as a row */
+    gap: 10px;           /* Re-adds the clean 10px spacing between the two buttons */
+    align-items: center; /* Keeps them perfectly aligned with the rest of the header row */
+}
+
 .enerccio_mangagen_section_btn_copy {
-    margin-left: auto; /* Pushes both the copy and delete buttons cleanly to the far right */
     transition: color 0.15s ease-in-out;
 }
 
@@ -430,7 +436,6 @@
 }
 
 .enerccio_mangagen_section_btn_delete {
-    margin-left: auto; /* Pushes the delete button cleanly to the far right of the header bar */
     transition: color 0.15s ease-in-out;
 }
 
