@@ -1,0 +1,62 @@
+<div class="enerccio_mangagen_workspace">
+    <div class="enerccio_mangagen_workspace_header">
+        <div class="enerccio_mangagen_field">
+            <label for="manga_token_budget">Token Budget</label>
+            <input type="number" id="manga_token_budget" class="text_pole" min="512" step="1" />
+        </div>
+        <div class="enerccio_mangagen_field">
+            <label for="manga_trigger">WI Trigger</label>
+            <select id="manga_trigger" class="text_pole">
+                <option value="MangaGenerator">MangaGenerator</option>
+                <option value="Normal">Normal</option>
+            </select>
+        </div>
+        <div class="enerccio_mangagen_field">
+            <label for="manga_split_count">Split Message Count</label>
+            <input type="number" id="manga_split_count" class="text_pole" min="1" step="1" />
+        </div>
+        <div class="enerccio_mangagen_field">
+            <label for="manga_context_left">Messages Before</label>
+            <input type="number" id="manga_context_left" class="text_pole" min="0" step="1" />
+        </div>
+        <div class="enerccio_mangagen_field">
+            <label for="manga_context_right">Messages After</label>
+            <input type="number" id="manga_context_right" class="text_pole" min="0" step="1" />
+        </div>
+
+        <div class="enerccio_mangagen_field checkbox_field">
+            <input type="checkbox" id="manga_strip_char_names" />
+            <label for="manga_strip_char_names">Strip Character Names</label>
+        </div>
+        <div class="enerccio_mangagen_field checkbox_field">
+            <input type="checkbox" id="manga_strip_username" />
+            <label for="manga_strip_username">Strip Persona Name</label>
+        </div>
+
+        <button id="manga_btn_prompt_override" class="menu_button HTML_button" title="Edit Prompt Template">Prompt Override</button>
+        <button id="manga_btn_additional_rules" class="menu_button HTML_button" title="Edit Additional Rules">Additional Rules</button>
+
+        <button id="manga_btn_add_panel" class="menu_button HTML_button a_bright_button" title="Create Next Panel Section">
+            <i class="fa-solid fa-plus"></i> Add Panel
+        </button>
+    </div>
+
+    <div id="manga_prompt_override_panel" class="enerccio_mangagen_prompt_panel" style="display: none;">
+        <div class="enerccio_mangagen_prompt_panel_titlebar">
+            <span>Prompt Override Configuration</span>
+            <button id="manga_btn_close_prompt" class="menu_button fa-solid fa-xmark" title="Close Panel"></button>
+        </div>
+        <textarea id="manga_prompt_override" class="text_pole" rows="8" placeholder="Enter custom prompt rules here..."></textarea>
+    </div>
+
+    <div id="manga_additional_rules_panel" class="enerccio_mangagen_prompt_panel" style="display: none;">
+        <div class="enerccio_mangagen_prompt_panel_titlebar">
+            <span>Additional Rules Configuration</span>
+            <button id="manga_btn_close_rules" class="menu_button fa-solid fa-xmark" title="Close Panel"></button>
+        </div>
+        <textarea id="manga_additional_rules" class="text_pole" rows="6" placeholder="Enter persistent formatting instructions or character descriptions..."></textarea>
+    </div>
+
+    <div id="enerccio_mangagen_panels_container" class="enerccio_mangagen_panels_workspace">
+    </div>
+</div>

@@ -1,0 +1,66 @@
+<div class="enerccio_mangagen_section_row" id="mangagen_section_placeholder" data-index="-1">
+    <!-- Header Control Bar containing Context/Message Bound Intervals -->
+    <div class="enerccio_mangagen_section_header">
+        <div class="enerccio_mangagen_row_field">
+            <label>Context From</label>
+            <input type="number" class="text_pole enerccio_mangagen_section_ctx_from" min="0" step="1" />
+        </div>
+        <div class="enerccio_mangagen_row_field">
+            <label>Context To</label>
+            <input type="number" class="text_pole enerccio_mangagen_section_ctx_to" min="0" step="1" />
+        </div>
+        <div class="enerccio_mangagen_row_field">
+            <label>Message From</label>
+            <input type="number" class="text_pole enerccio_mangagen_section_msg_from" min="0" step="1" />
+        </div>
+        <div class="enerccio_mangagen_row_field">
+            <label>Message To</label>
+            <input type="number" class="text_pole enerccio_mangagen_section_msg_to" min="0" step="1" />
+        </div>
+
+        <button class="menu_button fa-solid fa-circle-info enerccio_mangagen_section_btn_info" title="Inspect Selected Messages Range"></button>
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_prompt" title="Modify Section Prompt Override">Prompt</button>
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_rules" title="Modify Section Additional Rules">Rules</button>
+        <button class="menu_button fa-solid fa-copy enerccio_mangagen_section_btn_copy" title="Copy Raw Content"></button>
+        <button class="menu_button fa-solid fa-trash enerccio_mangagen_section_btn_delete" title="Delete Panel"></button>
+    </div>
+
+    <!-- Toggleable Control Fields for Section Rules Adjustments -->
+    <div class="enerccio_mangagen_section_toggle_panel enerccio_mangagen_section_prompt_panel" style="display: none;">
+        <textarea class="text_pole enerccio_mangagen_section_prompt_override" rows="3" placeholder="Section-specific prompt override layout..."></textarea>
+    </div>
+    <div class="enerccio_mangagen_section_toggle_panel enerccio_mangagen_section_rules_panel" style="display: none;">
+        <textarea class="text_pole enerccio_mangagen_section_additional_rules" rows="3" placeholder="Section-specific context formatting criteria..."></textarea>
+    </div>
+
+    <!-- Tall main text block containing generated markup layouts -->
+    <div class="enerccio_mangagen_section_main">
+        <div class="enerccio_mangagen_mes_block">
+            <!-- Asynchronous Streaming Thinking Framework Container Accordion -->
+            <details class="enerccio_mangagen_reasoning_details" style="display: none;">
+                <summary class="enerccio_mangagen_reasoning_summary flex-container">
+                    <div class="enerccio_mangagen_reasoning_header_block flex-container">
+                        <div class="enerccio_mangagen_reasoning_header flex-container">
+                            <span class="enerccio_mangagen_reasoning_text_label">Thinking for 0.0 s</span>
+                            <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
+                        </div>
+                    </div>
+                </summary>
+                <div class="enerccio_mangagen_reasoning"></div>
+            </details>
+
+            <!-- Dual-Mode Markdown View / Raw Text Editor Container -->
+            <div class="enerccio_mangagen_content_container">
+                <div class="enerccio_mangagen_section_generated_view text_pole"></div>
+                <textarea class="text_pole enerccio_mangagen_section_generated_edit" placeholder="Generated scene descriptors layout or panel scripts will appear here..." style="display: none;"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Execution Menu Control Row -->
+    <div class="enerccio_mangagen_section_footer">
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_generate">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation
+        </button>
+    </div>
+</div>

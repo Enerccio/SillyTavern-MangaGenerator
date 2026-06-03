@@ -6,13 +6,15 @@ import {
     initializeRequestMetadata,
     loadSettings,
     log,
-    setChatMetadata,
+    setChatMetadata, toastDebounced,
 } from "./utils.js";
-import {getCharacterCardFields, getMaxPromptTokens} from "/script.js";
+import {getCharacterCardFields, getMaxPromptTokens, messageFormatting, name1, user_avatar} from "/script.js";
 import {getWorldInfoPrompt} from "/scripts/world-info.js";
 import {t} from "/scripts/i18n.js";
 import {renderExtensionTemplateAsync} from "/scripts/extensions.js";
 import {EXTENSION_PATH} from "./conf.js";
+import {power_user} from "/scripts/power-user.js";
+import {getOrCreatePersonaDescriptor} from "/scripts/personas.js";
 
 const MANGA_DENOMINATOR = 'SOURCE MANUSCRIPT';
 const MANGA_DENOMINATOR_START = `===== ${MANGA_DENOMINATOR} START =====`;
@@ -28,6 +30,8 @@ const DEFAULT_PROMPT = `OTHER: You are an expert Manga Scriptwriter and Storyboa
 2. You have {{tokenBudget}} token budget, use it
 3. Do not create panels for story content you already created before
 4. Use provided ${LORE_DENOMINATOR} section as a source of background lore.
+5. Adapt every event.
+6. Keep events in chronological order just like in ${MANGA_DENOMINATOR}.
 
 ### Adaptation Guidelines
 1. Visual Storytelling: Translate internal thoughts or narrative descriptions into visual actions, framing choices, or symbolic background elements.
@@ -125,11 +129,14 @@ class Manga {
         this.title = "Untitled"
         this.sections = [];
         this.promptOverride = null;
+        this.additionalRules = null;
         this.tokenBudget = 4096;
         this.trigger = 'MangaGenerator'
         this.splitCount = 25;
         this.contextLeft = 25;
         this.contextRight = 25;
+        this.stripCharacterNames = false;
+        this.stripUsername = false;
     }
 
     toJson() {
@@ -137,11 +144,14 @@ class Manga {
             title: this.title,
             sections: this.sections.map(section => section.toJson()),
             promptOverride: this.promptOverride,
+            additionalRules: this.additionalRules,
             tokenBudget: this.tokenBudget,
             trigger: this.trigger,
             splitCount: this.splitCount,
             contextLeft: this.contextLeft,
             contextRight: this.contextRight,
+            stripCharacterNames: this.stripCharacterNames,
+            stripUsername: this.stripUsername,
         };
     }
 
@@ -150,12 +160,23 @@ class Manga {
         manga.title = json.title;
         manga.sections = json.sections.map(sectionJson => MangaSection.fromJson(sectionJson));
         manga.promptOverride = json.promptOverride;
+        manga.additionalRules = json.additionalRules;
         manga.tokenBudget = json.tokenBudget;
         manga.trigger = json.trigger;
         manga.splitCount = json.splitCount;
         manga.contextLeft = json.contextLeft;
         manga.contextRight = json.contextRight;
+        manga.stripCharacterNames = json.stripCharacterNames;
+        manga.stripUsername = json.stripUsername;
+
         return manga;
+    }
+
+    getSection(sectionIndex) {
+        if (sectionIndex >= 0 && sectionIndex < this.sections.length) {
+            return this.sections[sectionIndex];
+        }
+        throw new Error('Invalid active manga section index');
     }
 
 }
@@ -191,10 +212,7 @@ class MangaContainer {
 
     getSection(sectionIndex) {
         const cmanga = this.getCurrent();
-        if (sectionIndex >= 0 && sectionIndex < cmanga.sections.length) {
-            return cmanga.sections[sectionIndex];
-        }
-        throw new Error('Invalid active manga section index');
+        return cmanga.getSection(sectionIndex);
     }
 
 }
@@ -230,17 +248,83 @@ class MangaGenerator {
         // Dynamically build individual manga tabs
         this.mangaContainer.mangas.forEach((manga, index) => {
             const isActive = index === this.mangaContainer.activeManga;
-            const $tab = $('<button></button>')
+
+            // Changed from <button> to <div> to support nesting the interactive rename textfield
+            const $tab = $('<div></div>')
                 .addClass('menu_button enerccio_mangagen_tab')
-                .text(manga.title)
                 .attr('data-index', index);
 
             if (isActive) {
                 $tab.addClass('enerccio_mangagen_tab_active');
             }
 
+            // Inner title text holder
+            const $titleSpan = $('<span></span>')
+                .addClass('enerccio_mangagen_tab_title')
+                .text(manga.title);
+            $tab.append($titleSpan);
+
+            // Bind the inline rename function to the active tab
+            if (isActive) {
+                const $renameBtn = $('<i></i>')
+                    .addClass('fa-solid fa-pen enerccio_mangagen_rename_btn')
+                    .attr('title', 'Rename Manga');
+
+                $renameBtn.on('click', (e) => {
+                    e.stopPropagation(); // Prevent tab selection logic from refiring
+
+                    const $input = $('<input type="text" />')
+                        .addClass('text_pole')
+                        .val(manga.title)
+                        .css({
+                            'width': '100px',
+                            'height': '20px',
+                            'padding': '2px',
+                            'margin': '0',
+                            'font-size': 'inherit'
+                        });
+
+                    // Swap the elements out
+                    $titleSpan.hide();
+                    $renameBtn.hide();
+                    $tab.append($input);
+                    $input.focus().select();
+
+                    // Universal rename commit logic
+                    let isSaving = false;
+                    const saveRename = async () => {
+                        if (isSaving) return;
+                        isSaving = true;
+
+                        const newTitle = $input.val().trim();
+                        if (newTitle && newTitle !== manga.title) {
+                            manga.title = newTitle;
+                            await this.save();
+                        }
+                        await this.refresh();
+                    };
+
+                    // Save on leaving the textbox
+                    $input.on('blur', async () => {
+                        await saveRename();
+                    });
+
+                    // Save on hitting Enter
+                    $input.on('keypress', async (ev) => {
+                        if (ev.which === 13) {
+                            await saveRename();
+                        }
+                    });
+                });
+
+                $tab.append($renameBtn);
+            }
+
             // Bind click to switch active workspace tab and save selection state
-            $tab.on('click', async () => {
+            $tab.on('click', async (e) => {
+                // Ignore clicks if they are interacting with the textfield or the pen icon
+                if ($(e.target).closest('input, .enerccio_mangagen_rename_btn').length > 0) return;
+
                 this.mangaContainer.activeManga = index;
                 await this.save();
                 await this.refresh();
@@ -250,24 +334,483 @@ class MangaGenerator {
         });
 
         // Manage container view layouts based on item counts
+        // Manage container view layouts based on item counts
         const $emptyMessage = this.$mangaPanel.find('#enerccio_mangagen_empty_message');
+        const $contentArea = this.$mangaPanel.find('#enerccio_mangagen_content_area');
+
+        // Clear out any previously active workspace DOM branches before rebuilding
+        $contentArea.find('.enerccio_mangagen_workspace').remove();
+
         if (this.mangaContainer.activeManga >= 0 && this.mangaContainer.activeManga < this.mangaContainer.mangas.length) {
             $emptyMessage.hide();
-            // TODO: Inner active manga generation panel component mapping will happen here
+
+            // Asynchronously fetch and render the workspace elements template
+            const workspaceHtml = await renderExtensionTemplateAsync(EXTENSION_PATH, 'manga');
+            $contentArea.append(workspaceHtml);
+
+            const cmanga = this.mangaContainer.getCurrent();
+            const $workspace = $contentArea.find('.enerccio_mangagen_workspace');
+
+            // Wire up Token Budget Input (Min: 512)
+            const $tokenBudget = $workspace.find('#manga_token_budget');
+            $tokenBudget.val(cmanga.tokenBudget);
+            $tokenBudget.on('change input', async () => {
+                const val = parseInt($tokenBudget.val(), 10);
+                if (!isNaN(val) && val >= 512) {
+                    cmanga.tokenBudget = val;
+                    await this.save();
+                }
+            });
+
+            // Wire up World Info Trigger Dropdown Options
+            const $trigger = $workspace.find('#manga_trigger');
+            $trigger.val(cmanga.trigger || 'MangaGenerator');
+            $trigger.on('change', async () => {
+                cmanga.trigger = $trigger.val();
+                await this.save();
+            });
+
+            // Wire up Split Message Count Input (Min: 1)
+            const $splitCount = $workspace.find('#manga_split_count');
+            $splitCount.val(cmanga.splitCount);
+            $splitCount.on('change input', async () => {
+                const val = parseInt($splitCount.val(), 10);
+                if (!isNaN(val) && val >= 1) {
+                    cmanga.splitCount = val;
+                    await this.save();
+                }
+            });
+
+            // Wire up Number of Context Messages Before Input (Min: 0)
+            const $contextLeft = $workspace.find('#manga_context_left');
+            $contextLeft.val(cmanga.contextLeft);
+            $contextLeft.on('change input', async () => {
+                const val = parseInt($contextLeft.val(), 10);
+                if (!isNaN(val) && val >= 0) {
+                    cmanga.contextLeft = val;
+                    await this.save();
+                }
+            });
+
+            // Wire up Number of Context Messages After Input (Min: 0)
+            const $contextRight = $workspace.find('#manga_context_right');
+            $contextRight.val(cmanga.contextRight);
+            $contextRight.on('change input', async () => {
+                const val = parseInt($contextRight.val(), 10);
+                if (!isNaN(val) && val >= 0) {
+                    cmanga.contextRight = val;
+                    await this.save();
+                }
+            });
+
+            const $stripCharNames = $workspace.find('#manga_strip_char_names');
+            $stripCharNames.prop('checked', cmanga.stripCharacterNames);
+            $stripCharNames.on('change', async () => {
+                cmanga.stripCharacterNames = $stripCharNames.prop('checked');
+                await this.save();
+            });
+
+            // Wire up Strip Username Configuration Checkbox
+            const $stripUsername = $workspace.find('#manga_strip_username');
+            $stripUsername.prop('checked', cmanga.stripUsername);
+            $stripUsername.on('change', async () => {
+                cmanga.stripUsername = $stripUsername.prop('checked');
+                await this.save();
+            });
+
+            // Prompt Override Popup Handling Logic
+            const $promptPanel = $workspace.find('#manga_prompt_override_panel');
+            const $promptTextArea = $workspace.find('#manga_prompt_override');
+            const $btnPromptOverride = $workspace.find('#manga_btn_prompt_override');
+            const $btnClosePrompt = $workspace.find('#manga_btn_close_prompt');
+
+            $btnPromptOverride.on('click', () => {
+                // If null or unassigned, fall back to displaying the base DEFAULT_PROMPT configuration
+                $promptTextArea.val(cmanga.promptOverride !== null ? cmanga.promptOverride : DEFAULT_PROMPT);
+                $promptPanel.toggle();
+            });
+
+            $btnClosePrompt.on('click', () => {
+                $promptPanel.hide();
+            });
+
+            $promptTextArea.on('change input', async () => {
+                cmanga.promptOverride = $promptTextArea.val() || null;
+                await this.save();
+            });
+
+            // Additional Rules Popup Handling Logic
+            const $rulesPanel = $workspace.find('#manga_additional_rules_panel');
+            const $rulesTextArea = $workspace.find('#manga_additional_rules');
+            const $btnAdditionalRules = $workspace.find('#manga_btn_additional_rules');
+            const $btnCloseRules = $workspace.find('#manga_btn_close_rules');
+
+            $btnAdditionalRules.on('click', () => {
+                $rulesTextArea.val(cmanga.additionalRules !== null ? cmanga.additionalRules : '');
+                $rulesPanel.toggle();
+            });
+
+            $btnCloseRules.on('click', () => {
+                $rulesPanel.hide();
+            });
+
+            $rulesTextArea.on('change input', async () => {
+                cmanga.additionalRules = $rulesTextArea.val() || null;
+                await this.save();
+            });
+
+            // Wire up the Add Panel Automation Trigger using native attributes
+            const $btnAddPanel = $workspace.find('#manga_btn_add_panel');
+            $btnAddPanel.on('click', async () => {
+                const chatLog = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext().chat : (window.chat || []);
+
+                if (!chatLog || chatLog.length === 0) {
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error("Cannot create a panel because the current chat log contains no messages.");
+                    } else {
+                        alert("Error: The current chat log contains no messages.");
+                    }
+                    return;
+                }
+
+                let startingMsg = 0;
+
+                // Derive the tracking start coordinates from the last block's endingMessage attribute
+                if (cmanga.sections && cmanga.sections.length > 0) {
+                    const lastSection = cmanga.sections[cmanga.sections.length - 1];
+                    startingMsg = (lastSection.endingMessage ?? 0) + 1;
+                }
+
+                if (startingMsg >= chatLog.length) {
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error(`No new messages available for a new panel. (Index ${startingMsg} exceeds chat length ${chatLog.length})`);
+                    } else {
+                        alert(`Error: No new messages available for a new panel. (Index ${startingMsg} matches or exceeds chat length)`);
+                    }
+                    return;
+                }
+
+                const splitOffset = cmanga.splitCount || 25;
+                let endingMsg = startingMsg + splitOffset;
+
+                if (endingMsg >= chatLog.length) {
+                    endingMsg = chatLog.length - 1;
+                }
+
+                // Initialize class instance using native parameters
+                const newSection = new MangaSection();
+                newSection.startingMessage = startingMsg;
+                newSection.endingMessage = endingMsg;
+
+                // Read context values directly as numbers
+                const leftContext = cmanga.contextLeft ?? 0;
+                const rightContext = cmanga.contextRight ?? 0;
+
+                newSection.contextStartMessage = Math.max(0, startingMsg - leftContext);
+                newSection.contextEndMessage = Math.min(chatLog.length - 1, endingMsg + rightContext);
+                newSection.generatedText = "";
+
+                cmanga.sections.push(newSection);
+                await this.save();
+                await this.refresh();
+
+                const $panelsContainer = $workspace.find('#enerccio_mangagen_panels_container');
+                $panelsContainer.scrollTop($panelsContainer[0].scrollHeight);
+            });
+
+            // Locate the template workspace section block and instantiate child frames
+            const $panelsContainer = $workspace.find('#enerccio_mangagen_panels_container');
+            $panelsContainer.empty();
+
+            const sectionHtmlTemplate = await renderExtensionTemplateAsync(EXTENSION_PATH, 'section');
+
+            // Construct row layers for each assigned partition sequence inside the manga instance
+            if (cmanga.sections && cmanga.sections.length > 0) {
+                for (let index = 0; index < cmanga.sections.length; index++) {
+                    const section = cmanga.sections[index];
+                    const $row = $(sectionHtmlTemplate);
+
+                    $row.attr('id', `mangagen_section_${index}`);
+                    $row.attr('data-index', index);
+
+                    // Context and message input change listeners tracking native constructor schemas
+                    $row.find('.enerccio_mangagen_section_ctx_from').on('change input', async (e) => {
+                        section.contextStartMessage = parseInt($(e.target).val(), 10) || 0;
+                        await this.save();
+                    });
+                    $row.find('.enerccio_mangagen_section_ctx_to').on('change input', async (e) => {
+                        section.contextEndMessage = parseInt($(e.target).val(), 10) || 0;
+                        await this.save();
+                    });
+                    $row.find('.enerccio_mangagen_section_msg_from').on('change input', async (e) => {
+                        section.startingMessage = parseInt($(e.target).val(), 10) || 0;
+                        await this.save();
+                    });
+                    $row.find('.enerccio_mangagen_section_msg_to').on('change input', async (e) => {
+                        section.endingMessage = parseInt($(e.target).val(), 10) || 0;
+                        await this.save();
+                    });
+
+                    // Wiring up the diagnostic messaging log popover inspection rule (Awaiting async getter)
+                    $row.find('.enerccio_mangagen_section_btn_info').on('click', async (e) => {
+                        e.stopPropagation();
+                        $('.enerccio_mangagen_popover').remove();
+
+                        const fromIdx = section.startingMessage ?? 0;
+                        const toIdx = section.endingMessage ?? 0;
+
+                        // Properly awaiting the async helper method defined on the class instance
+                        let output = await this.getMessageContent(fromIdx, toIdx);
+
+                        if (!output || output.trim() === "") {
+                            output = "No active data frames indexed across this boundary interval.";
+                        }
+
+                        const $popover = $('<div class="enerccio_mangagen_popover"></div>');
+                        const $closeBtn = $('<i class="fa-solid fa-xmark enerccio_mangagen_popover_close" title="Close"></i>');
+                        const $content = $('<div class="enerccio_mangagen_popover_content"></div>').text(output);
+
+                        $popover.append($closeBtn).append($content);
+                        $('body').append($popover);
+
+                        const $btn = $(e.currentTarget);
+                        const btnOffset = $btn.offset();
+                        const btnHeight = $btn.outerHeight();
+
+                        $popover.css({
+                            top: btnOffset.top + btnHeight + 6,
+                            left: Math.max(15, btnOffset.left - 260)
+                        });
+
+                        $closeBtn.on('click', () => $popover.remove());
+
+                        const dismissPopover = (event) => {
+                            if (!$(event.target).closest('.enerccio_mangagen_popover').length) {
+                                $popover.remove();
+                                $(document).off('click', dismissPopover);
+                            }
+                        };
+                        setTimeout(() => $(document).on('click', dismissPopover), 20);
+
+                        $row.find('.enerccio_mangagen_reasoning_details').on('toggle', (e) => {
+                            const isOpen = e.target.open;
+                            $(e.target).find('.enerccio_mangagen_reasoning_arrow')
+                                .toggleClass('fa-chevron-down', !isOpen)
+                                .toggleClass('fa-chevron-up', isOpen);
+                        });
+                    });
+
+                    // Prompt overrides section submenus bindings
+                    const $promptPanel = $row.find('.enerccio_mangagen_section_prompt_panel');
+                    const $promptInput = $row.find('.enerccio_mangagen_section_prompt_override');
+                    $row.find('.enerccio_mangagen_section_btn_prompt').on('click', () => {
+                        $promptInput.val(section.promptOverride || '');
+                        $promptPanel.toggle();
+                    });
+                    $promptInput.on('change input', async () => {
+                        section.promptOverride = $promptInput.val() || null;
+                        await this.save();
+                    });
+
+                    // Additional configuration criteria boundaries bindings
+                    const $rulesPanel = $row.find('.enerccio_mangagen_section_rules_panel');
+                    const $rulesInput = $row.find('.enerccio_mangagen_section_additional_rules');
+                    $row.find('.enerccio_mangagen_section_btn_rules').on('click', () => {
+                        $rulesInput.val(section.additionalRules || '');
+                        $rulesPanel.toggle();
+                    });
+                    $rulesInput.on('change input', async () => {
+                        section.additionalRules = $rulesInput.val() || null;
+                        await this.save();
+                    });
+
+                    const $viewDiv = $row.find('.enerccio_mangagen_section_generated_view');
+                    const $editArea = $row.find('.enerccio_mangagen_section_generated_edit');
+
+                    // Click markdown view to open raw text editing panel
+                    $viewDiv.on('click', () => {
+                        if (section.isGenerating()) return; // Lock adjustments during streaming
+                        $viewDiv.hide();
+                        $editArea.show().focus();
+                    });
+
+                    // Leaving the textarea converts text back into clean Markdown
+                    $editArea.on('blur', async () => {
+                        section.generatedText = $editArea.val();
+                        $editArea.hide();
+                        $viewDiv.show();
+                        await this.save();
+                        await this.refreshSection($row, section);
+                    });
+
+                    // Keep data model updated with live typing strokes
+                    $editArea.on('input', () => {
+                        section.generatedText = $editArea.val();
+                    });
+
+                    // Execution pipeline dispatch action hook
+                    $row.find('.enerccio_mangagen_section_btn_generate').on('click', async () => {
+                        if (section.isGenerating()) {
+                            section.abortGenerating();
+                        } else {
+                            await this.generate($row, index);
+                        }
+                    });
+
+                    // Wire up the delete button trigger action
+                    $row.find('.enerccio_mangagen_section_btn_delete').on('click', async () => {
+                        // Display a standard browser confirmation dialog before destructive removal
+                        if (confirm(`Are you sure you want to delete Panel Section #${index + 1}?`)) {
+                            // Splice out the target panel from the array using its current index coordinate
+                            cmanga.sections.splice(index, 1);
+
+                            // Persist changes to chat metadata and trigger full layout redraw
+                            await this.save();
+                            await this.refresh();
+                        }
+                    });
+
+                    // Wire up the copy button trigger action
+                    $row.find('.enerccio_mangagen_section_btn_copy').on('click', () => {
+                        const textToCopy = section.generatedText || '';
+
+                        navigator.clipboard.writeText(textToCopy).then(() => {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.success(`Panel #${index + 1} content copied to clipboard!`);
+                            }
+                        }).catch((err) => {
+                            console.error('Failed to copy text: ', err);
+                            alert('Could not copy text to clipboard.');
+                        });
+                    });
+
+                    $panelsContainer.append($row);
+                    await this.refreshSection($row, section);
+                }
+            } else {
+                $panelsContainer.append('<div class="enerccio_mangagen_no_sections_fallback">No layout partitions built for this manga yet. Append section segments to begin generating.</div>');
+            }
         } else {
             $emptyMessage.show();
         }
     }
 
-    async refreshSection(sectionIndex, throttle = false) {
-        if (this.$mangaPanel) {
-            const cmanga = this.mangaContainer.getCurrent();
-            const genSection = cmanga.getSection(sectionIndex);
+    /**
+     * Refreshes and updates the active input display values for a targeted section row component.
+     * @param {jQuery} $row The jQuery reference object pointing to the mapped row container.
+     * @param {MangaSection} section The raw data container layer model instance.
+     * @param {boolean} staggered If true, throttles DOM updates to prevent lag during active token streaming.
+     */
+    async refreshSection($row, section, staggered = false) {
+        if (!$row || !section) return;
 
+        // Core DOM manipulation block
+        const performUpdate = () => {
+            const isGenerating = section.isGenerating();
+
+            // Populate baseline numeric intervals fields using native constructor attributes
+            $row.find('.enerccio_mangagen_section_ctx_from').val(section.contextStartMessage ?? 0);
+            $row.find('.enerccio_mangagen_section_ctx_to').val(section.contextEndMessage ?? 0);
+            $row.find('.enerccio_mangagen_section_msg_from').val(section.startingMessage ?? 0);
+            $row.find('.enerccio_mangagen_section_msg_to').val(section.endingMessage ?? 0);
+
+            // Fetch DOM references for the text scroll containers
+            const $viewDiv = $row.find('.enerccio_mangagen_section_generated_view');
+            const $editArea = $row.find('.enerccio_mangagen_section_generated_edit');
+            const $reasoningDiv = $row.find('.enerccio_mangagen_reasoning');
+
+            const viewEl = $viewDiv[0];
+            const reasoningEl = $reasoningDiv[0];
+
+            // Determine if elements are currently scrolled to the bottom (with a 15px threshold tolerance)
+            const isViewAtBottom = viewEl
+                ? (viewEl.scrollHeight - viewEl.scrollTop <= viewEl.clientHeight + 15)
+                : false;
+            const isReasoningAtBottom = reasoningEl
+                ? (reasoningEl.scrollHeight - reasoningEl.scrollTop <= reasoningEl.clientHeight + 15)
+                : false;
+
+            // Handle dual-mode content block updates
+            if (!$editArea.is(':focus')) {
+                let text = section.generatedText || '';
+                let formattedText = messageFormatting(text, '', true, false, -1);
+
+                $viewDiv.html(formattedText || '<p style="opacity: 0.5; font-style: italic; margin: 0;">No content generated yet. Click here to edit or run generation...</p>');
+                $editArea.val(text);
+            }
+
+            // Evaluate background thinking loop parameters data state metrics
+            const $detailsBlock = $row.find('.enerccio_mangagen_reasoning_details');
+            if (section.reasoningText && section.reasoningText.trim() !== '') {
+                $detailsBlock.show();
+                let data = section.reasoningText;
+                data = messageFormatting(data, '', true, false, -1, null, true);
+
+                if (reasoningEl) {
+                    reasoningEl.innerHTML = data;
+                }
+
+                const trackingTimeMs = section.reasoningTime ?? 0;
+                const elapsedSeconds = (trackingTimeMs / 1000).toFixed(1);
+
+                const statusLabel = section.reasoningFinished
+                    ? `Thought for ${elapsedSeconds} s`
+                    : `Thinking for ${elapsedSeconds} s`;
+
+                $row.find('.enerccio_mangagen_reasoning_text_label').text(statusLabel);
+            } else {
+                $detailsBlock.hide();
+            }
+
+            // --- Auto-Scroll Snap Anchor Processing ---
+            // If the user was already at the bottom before the text content changed, snap down to track the new tokens
+            if (isViewAtBottom && viewEl) {
+                viewEl.scrollTop = viewEl.scrollHeight;
+            }
+            if (isReasoningAtBottom && reasoningEl) {
+                reasoningEl.scrollTop = reasoningEl.scrollHeight;
+            }
+
+            // Automatically disable/enable standard interaction nodes during streaming
+            $row.find('input, .enerccio_mangagen_section_btn_info, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_delete, .enerccio_mangagen_section_btn_copy')
+                .prop('disabled', isGenerating);
+
+            // Force visual markdown view mode if generation is running
+            if (isGenerating) {
+                $editArea.hide();
+                $viewDiv.show();
+            }
+
+            // Swap out icons, style rules, and textual values based on streaming flag states
+            const $genBtn = $row.find('.enerccio_mangagen_section_btn_generate');
+            if (isGenerating) {
+                $genBtn.html('<i class="fa-solid fa-stop"></i> Abort Generation').addClass('aborting');
+            } else {
+                $genBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation').removeClass('aborting');
+            }
+        };
+
+        // Extract any scheduled timeout pointer stored on the row node
+        let currentTimeout = $row.data('refresh-timeout');
+
+        if (staggered) {
+            if (!currentTimeout) {
+                currentTimeout = setTimeout(() => {
+                    $row.removeData('refresh-timeout');
+                    performUpdate();
+                }, 150);
+                $row.data('refresh-timeout', currentTimeout);
+            }
+        } else {
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+                $row.removeData('refresh-timeout');
+            }
+            performUpdate();
         }
     }
 
-    async generate(sectionIndex) {
+    async generate($initialRow, sectionIndex) {
         const context = SillyTavern.getContext();
         const metadata = initializeRequestMetadata();
         const profile = metadata.cId;
@@ -281,11 +824,18 @@ class MangaGenerator {
             return;
         }
 
+        const getLiveRow = () => {
+            const $live = this.$mangaPanel ? this.$mangaPanel.find(`#mangagen_section_${sectionIndex}`) : null;
+            return ($live && $live.length) ? $live : $initialRow;
+        };
+
         genSection.setGenerating(true);
         genSection._abort = new AbortController();
-        const queries = await this.generateQueryData(cmanga, genSection, prevSection);
 
         try {
+            await this.refreshSection(getLiveRow(), genSection);
+            const queries = await this.generateQueryData(cmanga, genSection, prevSection);
+
             let asyncGeneratorFunction = await context.ConnectionManagerRequestService.sendRequest(profile, queries,
                 profile.max_tokens, {stream: true, signal: genSection._abort.signal});
 
@@ -316,7 +866,7 @@ class MangaGenerator {
                 if (reasoning)
                     genSection.setReasoning(reasoning, performance.now() - reasoningTime, reasoningDone);
 
-                await this.refreshSection(sectionIndex, true);
+                await this.refreshSection(getLiveRow(), genSection, true);
             }
         } catch (aborted) {
             if (aborted === 'userStopped') {
@@ -329,13 +879,16 @@ class MangaGenerator {
 
         genSection.setGenerating(false);
         await this.save();
-        await this.refreshSection(sectionIndex);
+        await this.refreshSection(getLiveRow(), genSection);
     }
 
     async generateQueryData(cmanga, genSection, prevSection = null) {
         const context = SillyTavern.getContext();
 
         const queries = [];
+
+        const userName = name1 || '';
+        let userDescription = power_user.persona_description || '';
 
         let {
             description,
@@ -367,6 +920,13 @@ class MangaGenerator {
             content: LORE_DENOMINATOR_START,
             role: "system",
         });
+
+        if (userName && userDescription) {
+            queries.push({
+                content: `${userName}: ${userDescription}`,
+                role: "system"
+            });
+        }
 
         if (system)
             queries.push({
@@ -439,38 +999,44 @@ class MangaGenerator {
             });
         }
 
-
         queries.push({
             content: LORE_DENOMINATOR_END,
             role: "system",
         });
 
         queries.push({
-            content: ```${MANGA_DENOMINATOR_START}
+            content: `${MANGA_DENOMINATOR_START}
 
-            ${chatMessages}
+            ${chatMessagesData}
 
-            ${MANGA_DENOMINATOR_END}```,
+            ${MANGA_DENOMINATOR_END}`,
             role: "system",
         });
 
-        let prompt = genSection.promptOverride || cmanga.defaultPrompt || DEFAULT_PROMPT;
+        let prompt = genSection.promptOverride || cmanga.promptOverride || DEFAULT_PROMPT;
         prompt = compilePromptTemplate(prompt, {
             tokenBudget: cmanga.tokenBudget || 4096,
-            additionalRules: genSection.additionalRules || '',
+            additionalRules: genSection.additionalRules || cmanga.additionalRules || '',
         });
 
-        if (genSection.startingMessage) {
-            const startingMessage = context.chat[genSection.startingMessage];
-            if (startingMessage) {
-                prompt += `\n\nAdapt from: ${startingMessage.mes}`;
+        if (genSection.startingMessage || genSection.endingMessage) {
+            prompt += "\n[Content Boundary Rules]\n"
+            if (genSection.contextStartMessage < genSection.startingMessage) {
+                if (genSection.startingMessage) {
+                    const startingMessage = context.chat[genSection.startingMessage];
+                    if (startingMessage) {
+                        prompt += `\nSTART THE ADAPTATION FROM THIS MESSAGE: \`\`\`${startingMessage.mes}\`\`\``;
+                    }
+                }
             }
-        }
 
-        if (genSection.endingMessage) {
-            const endingMessage = context.chat[genSection.endingMessage];
-            if (endingMessage) {
-                prompt += `\n\nAdapt to (including): ${endingMessage.mes}`;
+            if (genSection.contextEndMessage > genSection.endingMessage) {
+                if (genSection.endingMessage) {
+                    const endingMessage = context.chat[genSection.endingMessage];
+                    if (endingMessage) {
+                        prompt += `\nEND THE ADAPTATION BY ADAPTING UP TO THIS MESSAGE: \`\`\`${endingMessage.mes}\`\`\`\nThis message should be LAST message adapted.`;
+                    }
+                }
             }
         }
 
@@ -484,9 +1050,21 @@ class MangaGenerator {
     }
 
     async getMessageContent(from, to) {
+        const cmanga = this.mangaContainer.getCurrent();
         const context = SillyTavern.getContext();
         const messages = context.chat.slice(from, to + 1);
-        return messages.map(m => m.mes).join('\n');
+        return messages.map(m => {
+            if (m.is_user && !cmanga.stripUsername) {
+                return m.name + ': ' + m.mes;
+            } else {
+                if (m.is_system) {
+                    return m.mes;
+                } else if (!cmanga.stripCharacterNames) {
+                    return m.name + ': ' + m.mes;
+                }
+            }
+            return m.mes;
+        }).join('\n\n');
     }
 
     async open() {
