@@ -8,9 +8,11 @@ import {
     log,
     setChatMetadata,
 } from "./utils.js";
-import {getCharacterCardFields, getMaxPromptTokens} from "public/script.js";
-import {getWorldInfoPrompt} from "public/scripts/world-info.js";
-import {t} from "public/scripts/i18n.js";
+import {getCharacterCardFields, getMaxPromptTokens} from "/script.js";
+import {getWorldInfoPrompt} from "/scripts/world-info.js";
+import {t} from "/scripts/i18n.js";
+import {renderExtensionTemplateAsync} from "/scripts/extensions.js";
+import {EXTENSION_PATH} from "./conf.js";
 
 const MANGA_DENOMINATOR = 'SOURCE MANUSCRIPT';
 const MANGA_DENOMINATOR_START = `===== ${MANGA_DENOMINATOR} START =====`;
@@ -19,7 +21,7 @@ const LORE_DENOMINATOR = 'BACKGROUND LORE';
 const LORE_DENOMINATOR_START = `===== ${LORE_DENOMINATOR} START =====`;
 const LORE_DENOMINATOR_END = `===== ${LORE_DENOMINATOR} END =====`;
 
-const DEFAULT_PROMPT = ```OTHER: You are an expert Manga Scriptwriter and Storyboard Director. Your task is to adapt the ${MANGA_DENOMINATOR} raw roleplay text into a professional, highly visual manga script formatted by pages and panels. Keep the continuation of page numbers (if any).
+const DEFAULT_PROMPT = `OTHER: You are an expert Manga Scriptwriter and Storyboard Director. Your task is to adapt the ${MANGA_DENOMINATOR} raw roleplay text into a professional, highly visual manga script formatted by pages and panels. Keep the continuation of page numbers (if any).
 
 ### Content guidelines
 1. Do not ignore any story elements
@@ -47,7 +49,7 @@ For every page and panel, strictly use this structure:
 - **SFX / Thoughts**:
   - [Character Name] (Thought): "[Internal monologue]"
   - [SFX]: [Onomatopoeia description, e.g., *WHOOSH*, *THUD*, *RUMBLE*]
-```;
+`;
 
 class MangaSection {
 
@@ -209,12 +211,52 @@ class MangaGenerator {
     }
 
     async load() {
-        this.mangaContainer = MangaContainer.fromJson(getChatMetadata("mangas", true));
+        // Safe metadata handling when loading an uninitialized chat session
+        const metadata = getChatMetadata("mangas", true);
+        if (metadata) {
+            this.mangaContainer = MangaContainer.fromJson(metadata);
+        } else {
+            this.mangaContainer = new MangaContainer();
+        }
         await this.refresh();
     }
 
     async refresh() {
+        if (!this.$mangaPanel) return;
 
+        const $tabsContainer = this.$mangaPanel.find('.enerccio_mangagen_tabs_container');
+        $tabsContainer.empty();
+
+        // Dynamically build individual manga tabs
+        this.mangaContainer.mangas.forEach((manga, index) => {
+            const isActive = index === this.mangaContainer.activeManga;
+            const $tab = $('<button></button>')
+                .addClass('menu_button enerccio_mangagen_tab')
+                .text(manga.title)
+                .attr('data-index', index);
+
+            if (isActive) {
+                $tab.addClass('enerccio_mangagen_tab_active');
+            }
+
+            // Bind click to switch active workspace tab and save selection state
+            $tab.on('click', async () => {
+                this.mangaContainer.activeManga = index;
+                await this.save();
+                await this.refresh();
+            });
+
+            $tabsContainer.append($tab);
+        });
+
+        // Manage container view layouts based on item counts
+        const $emptyMessage = this.$mangaPanel.find('#enerccio_mangagen_empty_message');
+        if (this.mangaContainer.activeManga >= 0 && this.mangaContainer.activeManga < this.mangaContainer.mangas.length) {
+            $emptyMessage.hide();
+            // TODO: Inner active manga generation panel component mapping will happen here
+        } else {
+            $emptyMessage.show();
+        }
     }
 
     async refreshSection(sectionIndex, throttle = false) {
@@ -412,7 +454,7 @@ class MangaGenerator {
             role: "system",
         });
 
-        let prompt = genSection.promptOverride || DEFAULT_PROMPT;
+        let prompt = genSection.promptOverride || cmanga.defaultPrompt || DEFAULT_PROMPT;
         prompt = compilePromptTemplate(prompt, {
             tokenBudget: cmanga.tokenBudget || 4096,
             additionalRules: genSection.additionalRules || '',
@@ -450,6 +492,37 @@ class MangaGenerator {
     async open() {
         await this.load();
 
+        // Guard against appending duplicate dialog view instances
+        if ($('#enerccio_mangagen_viewer_overlay').length > 0) return;
+
+        // Render the viewer base layout template from file path configurations
+        const templateHtml = await renderExtensionTemplateAsync(
+            EXTENSION_PATH,
+            'viewer'
+        );
+
+        $('body').append(templateHtml);
+        this.$mangaPanel = $('#enerccio_mangagen_viewer_dialog');
+
+        // Wire Up Interactive Close Actions
+        $('#enerccio_mangagen_btn_close').on('click', () => {
+            $('#enerccio_mangagen_viewer_overlay').remove();
+            this.$mangaPanel = null;
+        });
+
+        // Wire Up Active "Create New Manga" Triggers
+        $('#enerccio_mangagen_btn_add').on('click', async () => {
+            const newManga = new Manga();
+            newManga.title = `Manga Script ${this.mangaContainer.mangas.length + 1}`;
+
+            this.mangaContainer.mangas.push(newManga);
+            this.mangaContainer.activeManga = this.mangaContainer.mangas.length - 1;
+
+            await this.save();
+            await this.refresh();
+        });
+
+        await this.refresh();
     }
 }
 
