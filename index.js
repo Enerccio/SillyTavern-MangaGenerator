@@ -1528,10 +1528,12 @@ class MangaGenerator {
     }
 
     async getMessageContent(from, to) {
+        const mapIds = {};
         async function processMessage(m) {
             const processedData = (await window.enerccio_compat?.messageProcessor(m.mes, { 'role': m.is_user ? 'user' : (m.is_system ? 'system' : 'assistant'), 'content': m.mes }, {
                 imprint: true,
-                postprocess: (text) => text.replaceAll('[', '<').replaceAll(']', '>')
+                postprocess: (text) => text.replaceAll('[', '<').replaceAll(']', '>'),
+                messageId: mapIds[m]
             })) || m.mes;
             if (m.is_user && !cmanga.stripUsername) {
                 return m.name + ': ' + processedData;
@@ -1547,7 +1549,12 @@ class MangaGenerator {
 
         const cmanga = this.mangaContainer.getCurrent();
         const context = SillyTavern.getContext();
-        const messages = context.chat.slice(from, to + 1);
+        const messages = [];
+        for (let i=from; i<to + 1; i++) {
+            const m = context.chat[i];
+            messages.push(m);
+            mapIds[m] = i;
+        }
         const processedMessages = await Promise.all(messages.map(processMessage));
         return processedMessages.join('\n\n');
     }
