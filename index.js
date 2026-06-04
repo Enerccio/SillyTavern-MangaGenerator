@@ -1528,21 +1528,28 @@ class MangaGenerator {
     }
 
     async getMessageContent(from, to) {
-        const cmanga = this.mangaContainer.getCurrent();
-        const context = SillyTavern.getContext();
-        const messages = context.chat.slice(from, to + 1);
-        return messages.map(m => {
+        async function processMessage(m) {
+            const processedData = (await window.enerccio_compat?.messageProcessor(m.mes, { 'role': m.is_user ? 'user' : (m.is_system ? 'system' : 'assistant'), 'content': m.mes }, {
+                imprint: true,
+                postprocess: (text) => text.replaceAll('[', '<').replaceAll(']', '>')
+            })) || m.mes;
             if (m.is_user && !cmanga.stripUsername) {
-                return m.name + ': ' + m.mes;
+                return m.name + ': ' + processedData;
             } else {
                 if (m.is_system) {
                     return m.mes;
                 } else if (!cmanga.stripCharacterNames) {
-                    return m.name + ': ' + m.mes;
+                    return m.name + ': ' + processedData;
                 }
             }
-            return m.mes;
-        }).join('\n\n');
+            return processedData;
+        }
+
+        const cmanga = this.mangaContainer.getCurrent();
+        const context = SillyTavern.getContext();
+        const messages = context.chat.slice(from, to + 1);
+        const processedMessages = await Promise.all(messages.map(processMessage));
+        return processedMessages.join('\n\n');
     }
 
     async open() {
