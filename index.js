@@ -1295,7 +1295,13 @@ class MangaGenerator {
                 if (genSection.startingMessage) {
                     const startingMessage = context.chat[genSection.startingMessage];
                     if (startingMessage) {
-                        prompt += `\nSTART THE ADAPTATION FROM THIS MESSAGE: \`\`\`${startingMessage.mes}\`\`\``;
+                        const startMessageData = (await window.enerccio_compat?.messageProcessor(startingMessage.mes, { 'role': startingMessage.is_user ? 'user' : (startingMessage.is_system ? 'system' : 'assistant'), 'content': startingMessage.mes }, {
+                            imprint: true,
+                            postprocess: (text) => text.replaceAll('[', '<').replaceAll(']', '>'),
+                            messageId: genSection.startingMessage
+                        })) || startingMessage.mes;
+
+                        prompt += `\nSTART THE ADAPTATION FROM THIS MESSAGE: \`\`\`${startMessageData}\`\`\``;
                     }
                 }
             }
@@ -1304,9 +1310,19 @@ class MangaGenerator {
                 if (genSection.endingMessage) {
                     const endingMessage = context.chat[genSection.endingMessage];
                     if (endingMessage) {
-                        prompt += `\nEND THE ADAPTATION BY ADAPTING UP TO THIS MESSAGE: \`\`\`${endingMessage.mes}\`\`\`\nThis message should be LAST message adapted.`;
+                        const endingMessageData = (await window.enerccio_compat?.messageProcessor(endingMessage.mes, { 'role': endingMessage.is_user ? 'user' : (endingMessage.is_system ? 'system' : 'assistant'), 'content': endingMessage.mes }, {
+                            imprint: true,
+                            postprocess: (text) => text.replaceAll('[', '<').replaceAll(']', '>'),
+                            messageId: genSection.endingMessage
+                        })) || endingMessage.mes;
+
+                        prompt += `\nEND THE ADAPTATION BY ADAPTING UP TO THIS MESSAGE: \`\`\`${endingMessageData}\`\`\`\nThis message should be LAST message adapted.`;
                     }
+                } else {
+                    prompt += "\n\nADAPT ALL MESSAGES AFTER!\n";
                 }
+            } else {
+                prompt += "\n\nADAPT ALL MESSAGES AFTER!\n";
             }
         }
 
