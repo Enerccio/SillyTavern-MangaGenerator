@@ -5,20 +5,69 @@
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <div class="enerccio_mangagen_settings_content">
+            <div class="enerccio_mangagen_settings_content" style="display: flex; flex-direction: column; gap: 10px;">
                 <table>
-
                     <tr title="The connection profile to use for manga generator.">
                         <td><span>Connection Profile</span></td>
                         <td><select id="connection_profile" class="text_pole"></select></td>
                     </tr>
+                    <tr>
+                        <td><span>Default Token Budget</span></td>
+                        <td><input type="number" id="default_token_budget" class="text_pole" min="512" step="1" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default WI Trigger</span></td>
+                        <td>
+                            <select id="default_trigger" class="text_pole">
+                                <option value="MangaGenerator">MangaGenerator</option>
+                                <option value="Normal">Normal</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Split Msg Count</span></td>
+                        <td><input type="number" id="default_split_count" class="text_pole" min="1" step="1" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Messages Before</span></td>
+                        <td><input type="number" id="default_context_left" class="text_pole" min="0" step="1" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Messages After</span></td>
+                        <td><input type="number" id="default_context_right" class="text_pole" min="0" step="1" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Strip Char Names</span></td>
+                        <td><input type="checkbox" id="default_strip_char_names" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Strip Persona Name</span></td>
+                        <td><input type="checkbox" id="default_strip_username" /></td>
+                    </tr>
+                    <tr>
+                        <td><span>Default Align Persona</span></td>
+                        <td><input type="checkbox" id="default_align_boundary" /></td>
+                    </tr>
                 </table>
 
-                <div class="flex-container justifyspacebetween alignitemscenter">
-                    <label for="enerccio_mangagen_first_message">Initial query</label>
-                    <textarea id="enerccio_mangagen_first_message" cols="4"></textarea>
+                <div class="flex-container flex-wrap" style="gap: 8px; margin-top: 5px;">
+                    <button id="enerccio_mangagen_btn_first_message" class="menu_button HTML_button">Initial Query</button>
+                    <button id="default_btn_prompt" class="menu_button HTML_button">Default Prompt</button>
+                    <button id="default_btn_rules" class="menu_button HTML_button">Default Rules</button>
+                    <button id="default_btn_tags_prompt" class="menu_button HTML_button">Default Tags Prompt</button>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Reusable Dialog Overlay for Multi-line Settings -->
+<div id="enerccio_mangagen_settings_overlay" class="enerccio_mangagen_overlay" style="display: none; z-index: 10005;">
+    <div class="enerccio_mangagen_dialog" style="width: 600px; height: auto; max-height: 80vh; gap: 10px;">
+        <div class="enerccio_mangagen_prompt_panel_titlebar">
+            <span id="settings_dialog_title">Edit Setting</span>
+            <button id="settings_dialog_close" class="menu_button fa-solid fa-xmark" title="Close Panel"></button>
+        </div>
+        <textarea id="settings_dialog_textarea" class="text_pole" rows="12" style="width: 100%; resize: vertical; font-family: monospace;"></textarea>
     </div>
 </div>

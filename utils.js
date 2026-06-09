@@ -240,6 +240,16 @@ export async function updateConnectionProfileDropdown() {
     });
 }
 
+export function compilePromptTemplate(templateString, variables) {
+    // Regular expression that finds anything inside {{ }}
+    const mustacheRegex = /\{\{\s*([a-zA-Z0-9_]+)\s*}}/g;
+
+    return templateString.replace(mustacheRegex, (match, key) => {
+        // If the variable exists in our object, replace it; otherwise, keep the tag intact
+        return variables[key] !== undefined ? variables[key] : match;
+    });
+}
+
 export async function loadSettings() {
     const settingsHtml = await renderExtensionTemplateAsync(
         EXTENSION_PATH,
@@ -251,20 +261,79 @@ export async function loadSettings() {
 
     await updateConnectionProfileDropdown();
 
-    const $firstMessage = $("#enerccio_mangagen_first_message");
-    $firstMessage.on('input', () => {
-        setSettings('firstMessage', $firstMessage.val());
+    // 1. Wire up standard inputs and checkboxes
+    const $tokenBudget = $("#default_token_budget");
+    $tokenBudget.val(getSettings('defaultTokenBudget', false, 4096));
+    $tokenBudget.on('change input', () => setSettings('defaultTokenBudget', parseInt($tokenBudget.val(), 10) || 4096));
+
+    const $trigger = $("#default_trigger");
+    $trigger.val(getSettings('defaultTrigger', false, 'MangaGenerator'));
+    $trigger.on('change', () => setSettings('defaultTrigger', $trigger.val()));
+
+    const $splitCount = $("#default_split_count");
+    $splitCount.val(getSettings('defaultSplitCount', false, 25));
+    $splitCount.on('change input', () => setSettings('defaultSplitCount', parseInt($splitCount.val(), 10) || 25));
+
+    const $contextLeft = $("#default_context_left");
+    $contextLeft.val(getSettings('defaultContextLeft', false, 25));
+    $contextLeft.on('change input', () => setSettings('defaultContextLeft', parseInt($contextLeft.val(), 10) || 25));
+
+    const $contextRight = $("#default_context_right");
+    $contextRight.val(getSettings('defaultContextRight', false, 25));
+    $contextRight.on('change input', () => setSettings('defaultContextRight', parseInt($contextRight.val(), 10) || 25));
+
+    const $stripCharNames = $("#default_strip_char_names");
+    $stripCharNames.prop('checked', getSettings('defaultStripCharacterNames', false, false));
+    $stripCharNames.on('change', () => setSettings('defaultStripCharacterNames', $stripCharNames.prop('checked')));
+
+    const $stripUsername = $("#default_strip_username");
+    $stripUsername.prop('checked', getSettings('defaultStripUsername', false, false));
+    $stripUsername.on('change', () => setSettings('defaultStripUsername', $stripUsername.prop('checked')));
+
+    const $alignBoundary = $("#default_align_boundary");
+    $alignBoundary.prop('checked', getSettings('defaultAlignBoundary', false, false));
+    $alignBoundary.on('change', () => setSettings('defaultAlignBoundary', $alignBoundary.prop('checked')));
+
+    // 2. Setup reusable settings dialog handler
+    const $overlay = $("#enerccio_mangagen_settings_overlay");
+    const $dialogTitle = $("#settings_dialog_title");
+    const $dialogTextarea = $("#settings_dialog_textarea");
+    const $dialogClose = $("#settings_dialog_close");
+
+    let activeSettingKey = null;
+
+    const openSettingsDialog = (title, settingKey, defaultValue = "") => {
+        activeSettingKey = settingKey;
+        $dialogTitle.text(title);
+        $dialogTextarea.val(getSettings(settingKey, false, defaultValue));
+        $overlay.show();
+    };
+
+    $dialogClose.on('click', () => {
+        $overlay.hide();
+        activeSettingKey = null;
     });
-    $firstMessage.val(getSettings('firstMessage', false, ``));
-}
 
-export function compilePromptTemplate(templateString, variables) {
-    // Regular expression that finds anything inside {{ }}
-    const mustacheRegex = /\{\{\s*([a-zA-Z0-9_]+)\s*}}/g;
+    $dialogTextarea.on('change input', () => {
+        if (activeSettingKey) {
+            setSettings(activeSettingKey, $dialogTextarea.val() || null);
+        }
+    });
 
-    return templateString.replace(mustacheRegex, (match, key) => {
-        // If the variable exists in our object, replace it; otherwise, keep the tag intact
-        return variables[key] !== undefined ? variables[key] : match;
+    // 3. Wire up text editing dialog buttons
+    $("#enerccio_mangagen_btn_first_message").on('click', () => {
+        openSettingsDialog("Edit Initial Query Prompt", "firstMessage");
+    });
+
+    $("#default_btn_prompt").on('click', () => {
+        openSettingsDialog("Edit Default Prompt Template Override", "defaultPromptOverride");
+    });
+
+    $("#default_btn_rules").on('click', () => {
+        openSettingsDialog("Edit Default Additional Rules", "defaultAdditionalRules");
+    });
+
+    $("#default_btn_tags_prompt").on('click', () => {
+        openSettingsDialog("Edit Default Tags Prompt Template Override", "defaultTagsPromptOverride");
     });
 }
-

@@ -85,6 +85,7 @@ class MangaSection {
         this.contextEndMessage = null;
         this.endingMessage = null;
         this.additionalRules = null;
+        this.additionalRulesAddendum = null;
         this._generating = false;
         this._abort = null;
 
@@ -107,6 +108,7 @@ class MangaSection {
         section.startingMessage = json.startingMessage;
         section.endingMessage = json.endingMessage;
         section.additionalRules = json.additionalRules;
+        section.additionalRulesAddendum = json.additionalRulesAddendum;
         section.contextStartMessage = json.contextStartMessage;
         section.contextEndMessage = json.contextEndMessage;
 
@@ -128,6 +130,7 @@ class MangaSection {
             startingMessage: this.startingMessage,
             endingMessage: this.endingMessage,
             additionalRules: this.additionalRules,
+            additionalRulesAddendum: this.additionalRulesAddendum,
             contextStartMessage: this.contextStartMessage,
             contextEndMessage: this.contextEndMessage,
 
@@ -184,17 +187,17 @@ class Manga {
     constructor() {
         this.title = "Untitled"
         this.sections = [];
-        this.promptOverride = null;
-        this.tagsPromptOverride = null;
-        this.additionalRules = null;
-        this.tokenBudget = 4096;
-        this.trigger = 'MangaGenerator'
-        this.splitCount = 25;
-        this.contextLeft = 25;
-        this.contextRight = 25;
-        this.stripCharacterNames = false;
-        this.stripUsername = false;
-        this.alignBoundary = false;
+        this.promptOverride = getSettings("defaultPromptOverride", false, null);
+        this.tagsPromptOverride = getSettings("defaultTagsPromptOverride", false, null);
+        this.additionalRules = getSettings("defaultAdditionalRules", false, null);
+        this.tokenBudget = parseInt(getSettings("defaultTokenBudget", false, 4096), 10);
+        this.trigger = getSettings("defaultTrigger", false, 'MangaGenerator');
+        this.splitCount = parseInt(getSettings("defaultSplitCount", false, 25), 10);
+        this.contextLeft = parseInt(getSettings("defaultContextLeft", false, 25), 10);
+        this.contextRight = parseInt(getSettings("defaultContextRight", false, 25), 10);
+        this.stripCharacterNames = getSettings("defaultStripCharacterNames", false, false);
+        this.stripUsername = getSettings("defaultStripUsername", false, false);
+        this.alignBoundary = getSettings("defaultAlignBoundary", false, false);
     }
 
     toJson() {
@@ -338,7 +341,8 @@ class MangaGenerator {
             // Changed from <button> to <div> to support nesting the interactive rename textfield
             const $tab = $('<div></div>')
                 .addClass('menu_button enerccio_mangagen_tab')
-                .attr('data-index', index);
+                .attr('data-index', index)
+                .attr('draggable', 'true');
 
             if (isActive) {
                 $tab.addClass('enerccio_mangagen_tab_active');
@@ -349,6 +353,51 @@ class MangaGenerator {
                 .addClass('enerccio_mangagen_tab_title')
                 .text(manga.title);
             $tab.append($titleSpan);
+
+            // Drag and drop event handlers to reorder tabs
+            $tab.on('dragstart', (e) => {
+                e.originalEvent.dataTransfer.setData('text/plain', index.toString());
+                $tab.addClass('dragging');
+            });
+
+            $tab.on('dragover', (e) => {
+                e.preventDefault(); // Required to allow a drop
+                $tab.addClass('drag-over');
+            });
+
+            $tab.on('dragleave', () => {
+                $tab.removeClass('drag-over');
+            });
+
+            $tab.on('drop', async (e) => {
+                e.preventDefault();
+                $tab.removeClass('drag-over');
+                const dragIndex = parseInt(e.originalEvent.dataTransfer.getData('text/plain'), 10);
+                if (!isNaN(dragIndex) && dragIndex !== index) {
+                    const targetIndex = index;
+
+                    // Reorder the array
+                    const draggedManga = this.mangaContainer.mangas[dragIndex];
+                    this.mangaContainer.mangas.splice(dragIndex, 1);
+                    this.mangaContainer.mangas.splice(targetIndex, 0, draggedManga);
+
+                    // Keep active selection pointer aligned with original selected item position
+                    if (this.mangaContainer.activeManga === dragIndex) {
+                        this.mangaContainer.activeManga = targetIndex;
+                    } else if (this.mangaContainer.activeManga > dragIndex && this.mangaContainer.activeManga <= targetIndex) {
+                        this.mangaContainer.activeManga--;
+                    } else if (this.mangaContainer.activeManga < dragIndex && this.mangaContainer.activeManga >= targetIndex) {
+                        this.mangaContainer.activeManga++;
+                    }
+
+                    await this.save();
+                    await this.refresh();
+                }
+            });
+
+            $tab.on('dragend', () => {
+                $tab.removeClass('dragging');
+            });
 
             // Bind the inline rename function to the active tab
             if (isActive) {
@@ -396,9 +445,10 @@ class MangaGenerator {
                     });
 
                     // Save on hitting Enter
-                    $input.on('keypress', async (ev) => {
-                        if (ev.which === 13) {
-                            await saveRename();
+                    $input.on('keydown', (ev) => {
+                        if (ev.key === 'Enter') {
+                            ev.preventDefault();
+                            $input.trigger('blur');
                         }
                     });
                 });
@@ -570,6 +620,37 @@ class MangaGenerator {
             $rulesTextArea.on('change input', async () => {
                 cmanga.additionalRules = $rulesTextArea.val() || null;
                 await this.save();
+            });
+
+            // Wire up the Copy All Panels and Tags Content Trigger
+            const $btnCopyAll = $workspace.find('#manga_btn_copy_all');
+            $btnCopyAll.on('click', () => {
+                const panelsText = cmanga.sections
+                    .map(section => section.generatedText || '')
+                    .filter(text => text.trim() !== '')
+                    .join('\n\n');
+
+                const tagsText = cmanga.sections
+                    .map(section => section.tagsText || '')
+                    .filter(text => text.trim() !== '')
+                    .join('\n\n');
+
+                let combinedOutput = panelsText;
+                if (tagsText) {
+                    combinedOutput += (combinedOutput ? '\n\n' : '') + tagsText;
+                }
+
+                if (!combinedOutput.trim()) {
+                    toastDebounced("No generated storyboard or tags content found to copy.", "warning");
+                    return;
+                }
+
+                navigator.clipboard.writeText(combinedOutput).then(() => {
+                    toastDebounced("All storyboard panels and tags copied to clipboard!");
+                }).catch((err) => {
+                    console.error('Failed to copy all content: ', err);
+                    alert('Could not copy content to clipboard.');
+                });
             });
 
             // Wire up the Add Panel Automation Trigger using native attributes
@@ -765,8 +846,22 @@ class MangaGenerator {
                         await this.save();
                     });
 
+                    const $addendumPanel = $row.find('.enerccio_mangagen_section_addendum_panel');
+                    const $addendumInput = $row.find('.enerccio_mangagen_section_additional_rules_addendum');
+                    $row.find('.enerccio_mangagen_section_btn_addendum').on('click', (e) => {
+                        e.stopPropagation();
+                        $addendumInput.val(section.additionalRulesAddendum || '');
+                        const wasVisible = $addendumPanel.is(':visible');
+                        $allDropdownPanels.hide(); // Hide any other open dropdowns first
+                        if (!wasVisible) $addendumPanel.show();
+                    });
+                    $addendumInput.on('change input', async () => {
+                        section.additionalRulesAddendum = $addendumInput.val() || null;
+                        await this.save();
+                    });
+
                     const dismissOpenDropdowns = (event) => {
-                        if (!$(event.target).closest('.enerccio_mangagen_section_toggle_panel, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_tags_prompt').length) {
+                        if (!$(event.target).closest('.enerccio_mangagen_section_toggle_panel, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_addendum, .enerccio_mangagen_section_btn_tags_prompt').length) {
                             $allDropdownPanels.hide();
                         }
                     };
@@ -796,15 +891,23 @@ class MangaGenerator {
                         section.generatedText = $editArea.val();
                     });
 
-                    // Execution pipeline dispatch action hook
+                    // Combined execution pipeline dispatch action hook
                     $row.find('.enerccio_mangagen_section_btn_generate').on('click', async () => {
-                        if (section.isGenerating()) {
-                            section.abortGenerating();
+                        const isTagsActive = !$row.find('.enerccio_mangagen_layout_tags').hasClass('hidden');
+                        if (isTagsActive) {
+                            if (section.isGeneratingTags()) {
+                                section.abortGeneratingTags();
+                            } else {
+                                await this.generateTags($row, index);
+                            }
                         } else {
-                            await this.generate($row, index);
+                            if (section.isGenerating()) {
+                                section.abortGenerating();
+                            } else {
+                                await this.generate($row, index);
+                            }
                         }
                     });
-
                     // Wire up the delete button trigger action
                     $row.find('.enerccio_mangagen_section_btn_delete').on('click', async () => {
                         // Display a standard browser confirmation dialog before destructive removal
@@ -857,14 +960,6 @@ class MangaGenerator {
                         section.tagsText = $tagsEdit.val();
                     });
 
-                    $row.find('.enerccio_mangagen_section_btn_generate_tags').on('click', async () => {
-                        if (section.isGeneratingTags()) {
-                            section.abortGeneratingTags();
-                        } else {
-                            await this.generateTags($row, index);
-                        }
-                    });
-
                     $row.find('.enerccio_mangagen_tags_reasoning_details').on('toggle', (e) => {
                         const isOpen = e.target.open;
                         $(e.target).find('.enerccio_mangagen_reasoning_arrow')
@@ -876,7 +971,7 @@ class MangaGenerator {
                     const $scriptLayout = $row.find('.enerccio_mangagen_layout_script');
                     const $tagsLayout = $row.find('.enerccio_mangagen_layout_tags');
 
-                    $toggleBtn.on('click', () => {
+                    $toggleBtn.on('click', async () => {
                         const showTags = $tagsLayout.hasClass('hidden');
                         if (showTags) {
                             $scriptLayout.addClass('hidden');
@@ -887,6 +982,7 @@ class MangaGenerator {
                             $scriptLayout.removeClass('hidden');
                             $toggleBtn.removeClass('active-mode').text('Tags');
                         }
+                        await this.refreshSection($row, section);
                     });
 
                     $panelsContainer.append($row);
@@ -1051,7 +1147,7 @@ class MangaGenerator {
                 tagsReasoningEl.scrollTop = currentTagsReasoningScroll;
             }
 
-            $row.find('input, .enerccio_mangagen_section_btn_info, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_tags_prompt, .enerccio_mangagen_section_btn_tags_toggle, .enerccio_mangagen_section_btn_delete, .enerccio_mangagen_section_btn_copy')
+            $row.find('input, .enerccio_mangagen_section_btn_info, .enerccio_mangagen_section_btn_prompt, .enerccio_mangagen_section_btn_rules, .enerccio_mangagen_section_btn_addendum, .enerccio_mangagen_section_btn_tags_prompt, .enerccio_mangagen_section_btn_tags_toggle, .enerccio_mangagen_section_btn_delete, .enerccio_mangagen_section_btn_copy')
                 .prop('disabled', isGenerating || isGeneratingTags);
 
             if (isGenerating) {
@@ -1063,19 +1159,22 @@ class MangaGenerator {
                 $tagsView.show();
             }
 
-            // --- 3. FIX THE BROKEN ICON GLYPHS (Swapped fa-stop for fa-ban) ---
+            // --- 3. MERGED GENERATION BUTTON STATE UPDATES ---
             const $genBtn = $row.find('.enerccio_mangagen_section_btn_generate');
-            if (isGenerating) {
-                $genBtn.html('<i class="fa-solid fa-ban"></i> Abort Generation').addClass('aborting');
-            } else {
-                $genBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation').removeClass('aborting');
-            }
+            const isTagsActive = !$row.find('.enerccio_mangagen_layout_tags').hasClass('hidden');
 
-            const $tagsGenBtn = $row.find('.enerccio_mangagen_section_btn_generate_tags');
-            if (isGeneratingTags) {
-                $tagsGenBtn.html('<i class="fa-solid fa-ban"></i> Abort Tag Gen').addClass('aborting');
+            if (isTagsActive) {
+                if (isGeneratingTags) {
+                    $genBtn.html('<i class="fa-solid fa-ban"></i> Abort Tag Gen').addClass('aborting');
+                } else {
+                    $genBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Generate Tags').removeClass('aborting');
+                }
             } else {
-                $tagsGenBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Generate Tags').removeClass('aborting');
+                if (isGenerating) {
+                    $genBtn.html('<i class="fa-solid fa-ban"></i> Abort Generation').addClass('aborting');
+                } else {
+                    $genBtn.html('<i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation').removeClass('aborting');
+                }
             }
         };
 
@@ -1303,9 +1402,13 @@ class MangaGenerator {
         });
 
         let prompt = genSection.promptOverride || cmanga.promptOverride || DEFAULT_PROMPT;
+        let sectionRules = genSection.additionalRules || cmanga.additionalRules || '';
+        if (genSection.additionalRulesAddendum) {
+            sectionRules += (sectionRules ? '\n' : '') + genSection.additionalRulesAddendum;
+        }
         prompt = compilePromptTemplate(prompt, {
             tokenBudget: cmanga.tokenBudget || 4096,
-            additionalRules: genSection.additionalRules || cmanga.additionalRules || '',
+            additionalRules: sectionRules,
         });
 
         if (genSection.startingMessage || genSection.endingMessage) {
@@ -1622,6 +1725,33 @@ class MangaGenerator {
 
             this.mangaContainer.mangas.push(newManga);
             this.mangaContainer.activeManga = this.mangaContainer.mangas.length - 1;
+
+            await this.save();
+            await this.refresh();
+        });
+
+        // Wire Up Active "Delete Current Manga" Trigger
+        $('#enerccio_mangagen_btn_delete_manga').on('click', async () => {
+            const activeIndex = this.mangaContainer.activeManga;
+
+            if (activeIndex < 0 || activeIndex >= this.mangaContainer.mangas.length) {
+                return;
+            }
+
+            const activeManga = this.mangaContainer.mangas[activeIndex];
+            const confirmed = confirm(`Are you sure you want to delete "${activeManga.title}"? This cannot be undone.`);
+
+            if (!confirmed) {
+                return;
+            }
+
+            this.mangaContainer.mangas.splice(activeIndex, 1);
+
+            if (this.mangaContainer.mangas.length === 0) {
+                this.mangaContainer.activeManga = -1;
+            } else {
+                this.mangaContainer.activeManga = Math.min(activeIndex, this.mangaContainer.mangas.length - 1);
+            }
 
             await this.save();
             await this.refresh();

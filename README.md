@@ -18,8 +18,10 @@ Built with scaling in mind, it features deep optimization for reasoning models, 
 * **🧠 Native Reasoning Token Support:** Explicitly captures and streams asynchronous reasoning steps (`<think>` blocks). Includes live debugging timers for *both* your storyboard scripts and tag outputs—fully prepared for deep reasoning models like DeepSeek-R1 and OpenAI's o-series.
 * **🎯 Advanced Context Boundary Controls:** Avoid character amnesia or context bloat. Fine-tune sliding data frameworks (`splitCount`, `contextLeft`, `contextRight`) to give the AI precise local context along with surrounding narrative memory.
 * **🪐 Smart UI State & Scroll Preservation:** Layout refreshes won't hijack your view. The extension safely caches and restores scroll positions across all internal views, maintaining layout stability if you scroll up to inspect items while text is streaming.
-* **🧩 Layered Template Overrides:** Total prompt control. Modify templates globally across a whole project or create granular prompt and rule overrides on a standalone panel scale via floating configuration popovers.
-* **📋 Context-Aware Copy Mechanism:** The header copy button automatically detects your current active view, picking up raw script markup or clean comma-separated tag structures depending on what is visible.
+* **🧩 Layered Template Overrides & Addendums:** Total prompt control. Modify templates globally across a whole project or create granular prompt overrides. Standard rules can be dynamically appended on a standalone panel scale using the **Addendum** editor without wiping out global structures.
+* **📋 Context-Aware Copy & Copy-All Mechanism:** Individual header copy buttons automatically detect your active view. The workspace features a global **Copy All** action that compiles all panels followed by all image tags into a single clean copy block.
+* **🗂️ Interactive Workspace Organizer:** Easily create multiple projects, quickly rename active manga workspaces with instant keyboard commits (**Enter** / Blur), and organize them fluently using native **Drag-and-Drop** tab sorting.
+* **⚙️ Comprehensive Global Defaults:** Set global default profiles in SillyTavern's extension settings (including Token budget, trigger rules, window configurations, and master prompts) to instantly pre-configure all newly created manga scripts.
 
 ---
 
@@ -39,8 +41,9 @@ You can install this extension directly through SillyTavern's native module load
 
 ## 🛠️ Getting Started
 
-1. Open the **Manga Generator** panel from your extensions sidebar.
-2. Create a new manga project tab and assign your token budgets and sliding window sizes.
-3. Click **Add Panel**; the extension automatically reads your chat positions and appends a layout partition segment.
-4. Hit **Run Generation** to watch the AI build out the visual script layout, stage directors, and core text breakdowns.
-5. Toggle the button layout over to **Tags** and select **Generate Tags** to instantly transform that freshly minted script data into an optimized prompt payload ready for your image generation pipelines!
+1. Set your preferred templates and limits in the SillyTavern **Extension Settings** (puzzle piece sidebar configuration).
+2. Open the **Manga Generator** panel from your extensions' sidebar.
+3. Create a new manga project tab and assign your token budgets and sliding window sizes.
+4. Click **Add Panel**; the extension automatically reads your chat positions and appends a layout partition segment.
+5. Hit **Run Generation** to watch the AI build out the visual script layout, stage directors, and core text breakdowns.
+6. Toggle the button layout over to **Tags** and select **Generate Tags** to instantly transform that freshly minted script data into an optimized prompt payload ready for your image generation pipelines!

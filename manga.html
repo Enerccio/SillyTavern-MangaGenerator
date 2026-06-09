@@ -1,7 +1,7 @@
 <div class="enerccio_mangagen_workspace">
     <div class="enerccio_mangagen_workspace_header">
         <div class="enerccio_mangagen_field">
-            <label for="manga_token_budget">Token Budget</label>
+            <label for="manga_token_budget">Tokens</label>
             <input type="number" id="manga_token_budget" class="text_pole" min="512" step="1" />
         </div>
         <div class="enerccio_mangagen_field">
@@ -12,35 +12,38 @@
             </select>
         </div>
         <div class="enerccio_mangagen_field">
-            <label for="manga_split_count">Split Message Count</label>
+            <label for="manga_split_count">Split</label>
             <input type="number" id="manga_split_count" class="text_pole" min="1" step="1" />
         </div>
         <div class="enerccio_mangagen_field">
-            <label for="manga_context_left">Messages Before</label>
+            <label for="manga_context_left">Before</label>
             <input type="number" id="manga_context_left" class="text_pole" min="0" step="1" />
         </div>
         <div class="enerccio_mangagen_field">
-            <label for="manga_context_right">Messages After</label>
+            <label for="manga_context_right">After</label>
             <input type="number" id="manga_context_right" class="text_pole" min="0" step="1" />
         </div>
 
         <div class="enerccio_mangagen_field checkbox_field">
             <input type="checkbox" id="manga_strip_char_names" />
-            <label for="manga_strip_char_names">Strip Character Names</label>
+            <label for="manga_strip_char_names">No Char Names</label>
         </div>
         <div class="enerccio_mangagen_field checkbox_field">
             <input type="checkbox" id="manga_strip_username" />
-            <label for="manga_strip_username">Strip Persona Name</label>
+            <label for="manga_strip_username">No User Name</label>
         </div>
         <div class="enerccio_mangagen_field checkbox_field">
             <input type="checkbox" id="manga_align_boundary" />
-            <label for="manga_align_boundary">Align Persona</label>
+            <label for="manga_align_boundary">Align</label>
         </div>
 
-        <button id="manga_btn_prompt_override" class="menu_button HTML_button" title="Edit Prompt Template">Prompt Override</button>
-        <button id="manga_btn_additional_rules" class="menu_button HTML_button" title="Edit Additional Rules">Additional Rules</button>
-        <button id="manga_btn_tags_prompt_override" class="menu_button HTML_button" title="Edit Image Tagging Prompt Template">Tags Prompt Override</button>
+        <button id="manga_btn_prompt_override" class="menu_button HTML_button" title="Edit Prompt Template">Prompt</button>
+        <button id="manga_btn_additional_rules" class="menu_button HTML_button" title="Edit Additional Rules">Rules</button>
+        <button id="manga_btn_tags_prompt_override" class="menu_button HTML_button" title="Edit Image Tagging Prompt Template">Tags Prompt</button>
 
+        <button id="manga_btn_copy_all" class="menu_button HTML_button" title="Copy All Panels and Tags Content">
+            <i class="fa-solid fa-copy"></i> Copy All
+        </button>
         <button id="manga_btn_add_panel" class="menu_button HTML_button a_bright_button" title="Create Next Panel Section">
             <i class="fa-solid fa-plus"></i> Add Panel
         </button>
@@ -71,5 +74,53 @@
     </div>
 
     <div id="enerccio_mangagen_panels_container" class="enerccio_mangagen_panels_workspace">
+        <!-- ================= LAYOUT MODE 1: SCRIPT VIEW ================= -->
+        <div class="enerccio_mangagen_layout_container enerccio_mangagen_layout_script">
+            <!-- Script Reasoning Info Block -->
+            <details class="enerccio_mangagen_reasoning_details" style="display: none;">
+                <summary class="enerccio_mangagen_reasoning_summary flex-container">
+                    <div class="enerccio_mangagen_reasoning_header_block flex-container">
+                        <div class="enerccio_mangagen_reasoning_header flex-container">
+                            <span class="enerccio_mangagen_reasoning_text_label">Thinking for 0.0 s</span>
+                            <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
+                        </div>
+                    </div>
+                </summary>
+                <div class="enerccio_mangagen_reasoning"></div>
+            </details>
+
+            <!-- Script Content Display Area -->
+            <div class="enerccio_mangagen_view_wrapper">
+                <div class="enerccio_mangagen_section_generated_view text_pole"></div>
+                <textarea class="text_pole enerccio_mangagen_section_generated_edit" style="display: none;"></textarea>
+            </div>
+        </div>
+
+        <!-- ================= LAYOUT MODE 2: TAGS VIEW ================= -->
+        <div class="enerccio_mangagen_layout_container enerccio_mangagen_layout_tags hidden">
+            <!-- Tags Reasoning Info Block -->
+            <details class="enerccio_mangagen_tags_reasoning_details enerccio_mangagen_reasoning_details" style="display: none;">
+                <summary class="enerccio_mangagen_reasoning_summary flex-container">
+                    <div class="enerccio_mangagen_reasoning_header_block flex-container">
+                        <div class="enerccio_mangagen_reasoning_header flex-container">
+                            <span class="enerccio_mangagen_tags_text_label">Thinking for 0.0 s</span>
+                            <div class="enerccio_mangagen_reasoning_arrow fa-solid fa-chevron-down"></div>
+                        </div>
+                    </div>
+                </summary>
+                <div class="enerccio_mangagen_tags_reasoning enerccio_mangagen_reasoning"></div>
+            </details>
+
+            <!-- Tags Content Display Area -->
+            <div class="enerccio_mangagen_view_wrapper">
+                <div class="enerccio_mangagen_section_tags_view"></div>
+                <textarea class="text_pole enerccio_mangagen_section_tags_edit" placeholder="AI scene prompts or character descriptors tags layout will appear here..." style="display: none;"></textarea>
+            </div>
+        </div>
+
+        <!-- Merged Generation Button -->
+        <button class="menu_button HTML_button enerccio_mangagen_section_btn_generate">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Run Generation
+        </button>
     </div>
 </div>
