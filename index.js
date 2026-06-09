@@ -194,6 +194,7 @@ class Manga {
         this.contextRight = 25;
         this.stripCharacterNames = false;
         this.stripUsername = false;
+        this.alignBoundary = false;
     }
 
     toJson() {
@@ -210,6 +211,7 @@ class Manga {
             contextRight: this.contextRight,
             stripCharacterNames: this.stripCharacterNames,
             stripUsername: this.stripUsername,
+            alignBoundary: this.alignBoundary,
         };
     }
 
@@ -227,6 +229,7 @@ class Manga {
         manga.contextRight = json.contextRight;
         manga.stripCharacterNames = json.stripCharacterNames;
         manga.stripUsername = json.stripUsername;
+        manga.alignBoundary = json.alignBoundary || false;
         return manga;
     }
 
@@ -501,6 +504,14 @@ class MangaGenerator {
                 await this.save();
             });
 
+            // Wire up Align Persona-Response Boundary Checkbox
+            const $alignBoundary = $workspace.find('#manga_align_boundary');
+            $alignBoundary.prop('checked', cmanga.alignBoundary);
+            $alignBoundary.on('change', async () => {
+                cmanga.alignBoundary = $alignBoundary.prop('checked');
+                await this.save();
+            });
+
             // Prompt Override Popup Handling Logic
             const $promptPanel = $workspace.find('#manga_prompt_override_panel');
             const $promptTextArea = $workspace.find('#manga_prompt_override');
@@ -597,6 +608,14 @@ class MangaGenerator {
 
                 if (endingMsg >= chatLog.length) {
                     endingMsg = chatLog.length - 1;
+                }
+
+                // Check if endingMsg is a user message and back it up by 1 if requested
+                if (cmanga.alignBoundary && endingMsg > startingMsg) {
+                    const lastMsg = chatLog[endingMsg];
+                    if (lastMsg && lastMsg.is_user) {
+                        endingMsg--;
+                    }
                 }
 
                 // Initialize class instance using native parameters
