@@ -8,7 +8,14 @@ import {
     log,
     setChatMetadata, toastDebounced,
 } from "./utils.js";
-import {getCharacterCardFields, getMaxPromptTokens, messageFormatting, name1, user_avatar} from "/script.js";
+import {
+    event_types, eventSource,
+    getCharacterCardFields,
+    getMaxPromptTokens,
+    messageFormatting,
+    name1,
+    user_avatar
+} from "/script.js";
 import {getWorldInfoPrompt} from "/scripts/world-info.js";
 import {t} from "/scripts/i18n.js";
 import {renderExtensionTemplateAsync} from "/scripts/extensions.js";
@@ -288,7 +295,18 @@ class MangaGenerator {
         this.mangaContainer = null;
     }
 
-    async save() {
+    async save(expectedChatId = null) {
+        // If an operation specifies a targeted context, don't allow writing if the user shifted chats
+        if (expectedChatId !== null) {
+            const currentContext = SillyTavern.getContext();
+            // Validate against the current chat session's unique identifier/file pointer
+            if (currentContext.chatId !== expectedChatId) {
+                error("Blocked a background save mismatch collision to prevent manga data erasure!");
+                return;
+            }
+        }
+
+        if (!this.mangaContainer) return;
         setChatMetadata("mangas", this.mangaContainer.toJson(), true);
     }
 
@@ -1200,6 +1218,7 @@ class MangaGenerator {
 
     async generate($initialRow, sectionIndex) {
         const context = SillyTavern.getContext();
+        const initialChatId = context.chatId;
         const metadata = initializeRequestMetadata();
         const profile = metadata.cId;
         const cmanga = this.mangaContainer.getCurrent();
@@ -1266,7 +1285,7 @@ class MangaGenerator {
         }
 
         genSection.setGenerating(false);
-        await this.save();
+        await this.save(initialChatId);
         await this.refreshSection(getLiveRow(), genSection);
     }
 
@@ -1459,6 +1478,7 @@ class MangaGenerator {
 
     async generateTags($initialRow, sectionIndex) {
         const context = SillyTavern.getContext();
+        const initialChatId = context.chatId;
         const metadata = initializeRequestMetadata();
         const profile = metadata.cId;
         const cmanga = this.mangaContainer.getCurrent();
@@ -1520,7 +1540,7 @@ class MangaGenerator {
         }
 
         genSection.setGeneratingTags(false);
-        await this.save();
+        await this.save(initialChatId);
         await this.refreshSection(getLiveRow(), genSection);
     }
 
@@ -1798,4 +1818,14 @@ $(async function () {
 
     await loadSettings();
     await addButton();
+
+    eventSource.on(event_types.CHAT_CHANGED, async () => {
+        if (mangaGenerator.$mangaPanel) {
+            log('Chat changed detected. Refreshing data boundaries.');
+            await mangaGenerator.load();
+        } else {
+            // Nullify volatile pointers to prevent stale background saves
+            mangaGenerator.mangaContainer = null;
+        }
+    });
 });
